@@ -1,0 +1,6 @@
+{
+    "clangd.arguments": [
+        "--header-insertion=never",
+        "--query-driver=/usr/bin/g++,/usr/bin/gcc,/usr/bin/clang++"
+    ]
+}
