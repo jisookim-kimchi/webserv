@@ -1,0 +1,28 @@
+1: Configuration File Parser
+Parse Nginx-style .conf files into ServerConfig and LocationConfig structures/classes.
+-Need to talk with Team
+
+2: Socket Creation and Event Loop Setup
+Bind listening sockets to configured ports and
+implement the main event loop using poll() (epoll() / kqueue()).
+-Need to decide epoll or kqueue.
+-Since we work on linux so epoll is better
+
+
+3: HTTP Request State Machine Parsing
+Parse incoming stream data from clients using a State Machine pattern(ENUM) (Request Line -> Headers -> Body).
+-Since there is no guarantee that the data is sent in a single packet, we might need to use a buffer to store the data.
+-thus we need to handle the case where the data is split into multiple packets.
+-So the server must keep track of how much data the client has sent
+
+
+4: Static File processing & Response Generation
+Read requested server files and send them back formatted as standard HTTP responses (Status Code + Headers + Body).
+- just read and send the file, added header
+
+
+5: CGI Processing
+Need to research about cgi processing.
+
+6: Stress Testing (Siege) & Leak check
+
