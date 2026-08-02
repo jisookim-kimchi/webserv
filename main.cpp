@@ -81,7 +81,6 @@ int main()
         }
         else
             std::cout << "accept : " << clientFd << std::endl;
-        
         char buf[4096] = {0};
         const int val = read(clientFd, buf, 4096);
         if(val < 0)
@@ -90,19 +89,22 @@ int main()
             continue;
         }
         else
-            std::cout << "read : " << val << std::endl;
+        {
+            std::cout << "-------------- Client Request Header --------------" << std::endl;
+            std::cout << buf << std::endl;
+        }
 
-        std::string userInput;
-        std::cout << "Enter something : ";
-        std::getline(std::cin, userInput);
-        userInput +="\r\n";
+        std::string serverResponse;
+        std::cout << "Server says : ";
+        std::getline(std::cin, serverResponse);
+        serverResponse +="\r\n";
         // server response message
         std::string response = 
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html; charset=UTF-8\r\n"
-        "Content-Length: " + std::to_string(userInput.length()) + "\r\n"
+        "Content-Length: " + std::to_string(serverResponse.length()) + "\r\n"
         "\r\n"
-        + userInput;
+        + serverResponse;
 
         /*
         @param 1 : socket fd
