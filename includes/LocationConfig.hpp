@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdint.h>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,15 @@ public:
     const std::string &getCgiPath() const {return cgi_path_;}
     bool getAutoindex() const {return autoindex_;} 
     
+    /* SETTER */
+    void setRoot(const std::string &root) {root_ = root;}
+    void setPath(const std::string &path) {path_ = path;}
+    void addAllowMethods(const std::string &allow_methods) {allow_methods_.push_back(allow_methods);}
+    void addIndex(const std::string &index) {index_.push_back(index);}
+    void setRedirection(const uint16_t &status_code, const std::string &target_url) {redirection_.first = status_code; redirection_.second = target_url;}
+    void setCgiPath(const std::string &cgi_path) {cgi_path_ = cgi_path;}
+    void setAutoindex(bool autoindex) {autoindex_ = autoindex;}
+
 private:
     std::string root_;                                  // Rootpath
     std::string path_;                                  // [path] : route
