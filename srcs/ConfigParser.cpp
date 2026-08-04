@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <cstdlib>
 
 ConfigParser::ConfigParser() {}
 ConfigParser::~ConfigParser() {}
@@ -30,7 +31,7 @@ void ConfigParser::parse(const std::string& filename)
         else
         {
             std::cout << "error : unexpected token outside server: " << tokens[index] << std::endl;
-            return;
+            exit(1);
         }
     }
 
@@ -125,7 +126,7 @@ void ConfigParser::parseServer(const std::vector<std::string>& tokens, size_t &i
     if (index >= tokens.size() || tokens[index] != "{")
     {
         std::cout << "error : expected '{' after server" << std::endl;
-        return;
+        exit(1);
     }
     index++;
     while (index < tokens.size() && tokens[index] != "}")
@@ -142,7 +143,7 @@ void ConfigParser::parseServer(const std::vector<std::string>& tokens, size_t &i
     if (index >= tokens.size() || tokens[index] != "}")
     {
         std::cout << "error : expected '}' after server" << std::endl;
-        return;
+        exit(1);
     }
     index++;
     server_configs_.push_back(new_server);
@@ -158,12 +159,14 @@ void ConfigParser::parseLocation(const std::vector<std::string>& tokens, size_t 
 {
     LocationConfig new_location;
     index++;
+    if (index >= tokens.size())
+        throw std::runtime_error("error : expected path after location");
     new_location.setPath(tokens[index]);
     index++;
     if (index >= tokens.size() || tokens[index] != "{")
     {
         std::cout << "error : expected '{' after location path" << std::endl;
-        return;
+        exit(1);
     }
     index++;
     while (index < tokens.size() && tokens[index] != "}")
@@ -173,7 +176,7 @@ void ConfigParser::parseLocation(const std::vector<std::string>& tokens, size_t 
     if (index >= tokens.size() || tokens[index] != "}")
     {
         std::cout << "error : expected '}' after location" << std::endl;
-        return;
+        exit(1);
     }
     index++;
     server.addLocation(new_location);
@@ -251,8 +254,8 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
     }
     else
     {
-        while (index < tokens.size() && tokens[index] != ";")
-            index++;
+        std::cout << "error : unknown server keyword  in  parseServerKeyword()" << std::endl;
+        exit(1);
     }
 
     if (index < tokens.size() && tokens[index] == ";")
@@ -267,7 +270,74 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
 */
 void ConfigParser::parseLocationKeyword(const std::vector<std::string>& tokens, size_t& index, LocationConfig& location)
 {
-    (void)tokens;
-    (void)location;
-    index++;
+    const std::string& found = tokens[index];
+    if (found == "root")
+    {
+        index++;
+        if (index < tokens.size() && tokens[index] != ";")
+            location.setRoot(tokens[index]);
+        index++;
+    }
+    else if (found == "index")
+    {
+        index++;
+        while (index < tokens.size() && tokens[index] != ";")
+        {
+            location.addIndex(tokens[index]);
+            index++;
+        }
+    }
+    else if (found == "allow_methods")
+    {
+        index++;
+        while (index < tokens.size() && tokens[index] != ";")
+        {
+            location.addAllowMethods(tokens[index]);
+            index++;
+        }
+    }
+    else if (found == "autoindex")
+    {
+        index++;
+        if (index < tokens.size() && tokens[index] != ";")
+        {
+            if (tokens[index] == "on")
+                location.setAutoindex(true);
+            else if (tokens[index] == "off")
+                location.setAutoindex(false);
+        }
+        index++;
+    }
+    else if (found == "return")
+    {
+        index++;
+        uint16_t status_code = 0;
+        std::string target_url = "";
+        if (index < tokens.size() && tokens[index] != ";")
+        {
+            status_code = static_cast<uint16_t>(std::stoi(tokens[index]));
+            index++;
+        }
+        if (index < tokens.size() && tokens[index] != ";")
+        {
+            target_url = tokens[index];
+            index++;
+        }
+        location.setRedirection(status_code, target_url);
+    }
+    else if (found == "cgi_pass" || found == "cgi_path")
+    {
+        index++;
+        if (index < tokens.size() && tokens[index] != ";")
+            location.setCgiPass(tokens[index]);
+        index++;
+    }
+    else
+    {
+        std::cout << "error : unknown location keyword  in  parseLocationKeyword()" << std::endl;
+        exit(1);
+    }
+
+    if (index < tokens.size() && tokens[index] == ";")
+        index++;
 }

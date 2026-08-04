@@ -6,7 +6,7 @@ LocationConfig::LocationConfig() :
     allow_methods_(),
     index_(),
     redirection_(),
-    cgi_path_(""),
+    cgi_pass_(""),
     autoindex_(false)
 {
     
@@ -31,7 +31,7 @@ LocationConfig &LocationConfig::operator=(const LocationConfig& other)
         allow_methods_ = other.allow_methods_;
         index_ = other.index_;
         redirection_ = other.redirection_;
-        cgi_path_ = other.cgi_path_;
+        cgi_pass_ = other.cgi_pass_;
         autoindex_ = other.autoindex_;
     }
     return *this;

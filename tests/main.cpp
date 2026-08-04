@@ -17,6 +17,9 @@ int main(int argc, char **argv)
 
     for (size_t i = 0; i < servers.size(); i++)
     {
+        if (0 < i)
+            outfile << "\n";
+        outfile << "server " << "[" << i  << "]" << std::endl;
         outfile << "host    " << servers[i].getHost() << std::endl;
         
         const std::vector<uint16_t>& ports = servers[i].getPort();
@@ -31,14 +34,37 @@ int main(int argc, char **argv)
         }
         outfile << "client_max_body_size    " << servers[i].getClientMaxBodySize() << std::endl;
         const std::map<uint16_t, std::string>& errs = servers[i].getErrorPagePath();
-        for (auto& [key, value] : errs)
+        for (const auto& [key, value] : errs)
         {
             outfile << "error_page     " << key << " " << value << std::endl;
+        }
+        const std::vector<LocationConfig>& locs = servers[i].getLocations();
+        for (size_t k = 0; k < locs.size(); k++)
+        {
+            outfile << "location    " << locs[k].getPath() << std::endl;
+            if (!locs[k].getRoot().empty())
+                outfile << "root    " << locs[k].getRoot() << std::endl;
+            if (!locs[k].getCgiPass().empty())
+                outfile << "cgi_pass    " << locs[k].getCgiPass() << std::endl;
+            outfile << "autoindex    " << (locs[k].getAutoindex() ? "on" : "off") << std::endl;
+            if (locs[k].getRedirection().first != 0)
+                outfile << "return    " << locs[k].getRedirection().first << " " << locs[k].getRedirection().second << std::endl;
+            if (!locs[k].getAllowMethods().empty())
+            {
+                outfile << "allow_methods    ";
+                for (const auto& m : locs[k].getAllowMethods()) outfile << m << " ";
+                outfile << std::endl;
+            }
+            if (!locs[k].getIndex().empty())
+            {
+                outfile << "index    ";
+                for (const auto& idx : locs[k].getIndex()) outfile << idx << " ";
+                outfile << std::endl;
+            }
         }
     }
     
     outfile.close();
-
 
     return 0;
 }

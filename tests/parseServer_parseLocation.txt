@@ -1,3 +1,4 @@
+server [0]
 host    127.0.0.1
 listen    8080
 server_name     localhost
@@ -7,8 +8,35 @@ error_page     500 /errors/50x.html
 error_page     502 /errors/50x.html
 error_page     503 /errors/50x.html
 error_page     504 /errors/50x.html
+location    /
+root    /home/jisookim/42webserv/www
+autoindex    on
+allow_methods    GET POST 
+index    index.html index.htm 
+location    /upload
+root    /home/jisookim/42webserv/www/upload
+autoindex    off
+allow_methods    GET POST DELETE 
+location    /redirect
+autoindex    off
+return    301 https://www.google.com
+location    .py
+cgi_pass    /usr/bin/python3
+autoindex    off
+allow_methods    GET POST 
+location    .php
+cgi_pass    /usr/bin/php-cgi
+autoindex    off
+allow_methods    GET POST 
+
+server [1]
 host    127.0.0.1
 listen    8081
 server_name     test.local
 client_max_body_size    1048576
 error_page     404 /errors/404.html
+location    /
+root    /home/jisookim/42webserv/www_test
+autoindex    off
+allow_methods    GET 
+index    index.html 
