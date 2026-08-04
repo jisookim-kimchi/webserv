@@ -21,6 +21,7 @@ public:
     const std::vector<std::string> &getServerName() const {return server_name_;} 
     const std::vector<uint16_t> &getPort() const {return port_;} 
     uint64_t getClientMaxBodySize() const {return client_max_body_size_;} 
+    const std::vector<LocationConfig>& getLocations() const {return locations_;}
 
     /* SETTER */
     void setHost(const std::string &host) {host_ = host;}
@@ -29,7 +30,7 @@ public:
     void addServerName(const std::string &server_name) {server_name_.push_back(server_name);}
     void addPort(const uint16_t port) {port_.push_back(port);}
     void addLocation(const LocationConfig &location) {locations_.push_back(location);}
-
+    
 private:
     std::string host_;                                  // Server IP Address
     std::vector<std::string>server_name_;               // Server Name
