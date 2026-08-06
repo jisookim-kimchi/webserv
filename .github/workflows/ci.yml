@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  parser-test:
+    name: Build and run parser test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build parser test
+        run: |
+          c++ -Wall -Wextra -Werror -g -std=c++17 tests/main.cpp srcs/*.cpp \
+            -Iincludes -o test_parser
+
+      - name: Run parser test
+        run: ./test_parser configs/Basic.config
+
+      - name: Verify generated parser output
+        run: git diff --exit-code -- tests/parseServer_parseLocation.txt
