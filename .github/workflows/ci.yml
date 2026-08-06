@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-format:
+    name: Code Linting & Formatting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-tidy
+
+      - name: Run pre-commit
+        uses: pre-commit/action@v3.0.1
+
+  build-and-test:
+    name: Build & Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up C++ Environment
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential
+
+      - name: Build Project & Tests
+        run: |
+          c++ -Wall -Wextra -Werror -g -std=c++17 tests/main.cpp srcs/*.cpp \
+            -Iincludes -o test_parser
+
+      - name: Run parser test
+        run: ./test_parser configs/Basic.config
+
+      - name: Verify Generated Parser Output
+        run: git diff --exit-code -- tests/parseServer_parseLocation.txt

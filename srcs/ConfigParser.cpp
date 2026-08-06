@@ -5,31 +5,28 @@
 #include <iostream>
 #include <cstdlib>
 
-ConfigParser::ConfigParser() {}
-ConfigParser::~ConfigParser() {}
-ConfigParser::ConfigParser(const ConfigParser& other) { *this = other; }
-ConfigParser& ConfigParser::operator=(const ConfigParser& other)
-{
-    if (this != &other)
-    {
+ConfigParser::ConfigParser() {
+}
+ConfigParser::~ConfigParser() {
+}
+ConfigParser::ConfigParser(const ConfigParser& other) {
+    *this = other;
+}
+ConfigParser& ConfigParser::operator=(const ConfigParser& other) {
+    if (this != &other) {
         server_configs_ = other.server_configs_;
     }
     return *this;
 }
 
-void ConfigParser::parse(const std::string& filename)
-{
+void ConfigParser::parse(const std::string& filename) {
     std::string file_data = readFile(filename);
     std::vector<std::string> tokens = tokenize(file_data);
     size_t index = 0;
-    while (index < tokens.size())
-    {
-        if (tokens[index] == "server")
-        {
+    while (index < tokens.size()) {
+        if (tokens[index] == "server") {
             parseServer(tokens, index);
-        }
-        else
-        {
+        } else {
             std::cout << "error : unexpected token outside server: " << tokens[index] << std::endl;
             exit(1);
         }
@@ -37,8 +34,7 @@ void ConfigParser::parse(const std::string& filename)
 
     std::ofstream outfile("tests/test_tokenize.txt");
 
-    for (size_t i = 0; i < tokens.size(); ++i)
-    {
+    for (size_t i = 0; i < tokens.size(); ++i) {
         outfile << "[" << i << "] ----> " << tokens[i] << std::endl;
     }
 
@@ -51,11 +47,10 @@ void ConfigParser::parse(const std::string& filename)
     @return : string of file
     @throw : runtime_error if file is empty or not found
 */
-std::string ConfigParser::readFile(const std::string &filename)
-{
+std::string ConfigParser::readFile(const std::string& filename) {
     if (filename.empty())
         throw std::runtime_error("error : empty filename");
-    
+
     std::ifstream file(filename.c_str());
     if (!file.is_open())
         throw std::runtime_error("error : open file : " + filename);
@@ -71,41 +66,29 @@ std::string ConfigParser::readFile(const std::string &filename)
     @return : vector of tokens
     @think : '/' case??
 */
-std::vector<std::string> ConfigParser::tokenize(const std::string &line)
-{
+std::vector<std::string> ConfigParser::tokenize(const std::string& line) {
     std::vector<std::string> tokens;
     std::string token;
-    for (size_t i = 0; i < line.length(); i++)
-    {
-        if (line[i] == '#')
-        {
-            if (!token.empty())
-            {
+    for (size_t i = 0; i < line.length(); i++) {
+        if (line[i] == '#') {
+            if (!token.empty()) {
                 tokens.push_back(token);
                 token.clear();
             }
             while (i < line.length() && line[i] != '\n')
                 i++;
-        }
-        else if (isspace(line[i]))
-        {
-            if(!token.empty())
-            {
+        } else if (isspace(line[i])) {
+            if (!token.empty()) {
                 tokens.push_back(token);
                 token.clear();
             }
-        }
-        else if (line[i] == '{' || line[i] == '}' || line[i] == ';')
-        {
-            if (!token.empty())
-            {
+        } else if (line[i] == '{' || line[i] == '}' || line[i] == ';') {
+            if (!token.empty()) {
                 tokens.push_back(token);
                 token.clear();
             }
             tokens.push_back(std::string(1, line[i]));
-        }
-        else
-        {
+        } else {
             token += line[i];
         }
     }
@@ -119,29 +102,22 @@ std::vector<std::string> ConfigParser::tokenize(const std::string &line)
     @param1 : tokens
     @param2 : index of tokens
 */
-void ConfigParser::parseServer(const std::vector<std::string>& tokens, size_t &index)
-{
+void ConfigParser::parseServer(const std::vector<std::string>& tokens, size_t& index) {
     ServerConfig new_server;
     index++;
-    if (index >= tokens.size() || tokens[index] != "{")
-    {
+    if (index >= tokens.size() || tokens[index] != "{") {
         std::cout << "error : expected '{' after server" << std::endl;
         exit(1);
     }
     index++;
-    while (index < tokens.size() && tokens[index] != "}")
-    {
-        if (tokens[index] == "location")
-        {
-           parseLocation(tokens, index, new_server);
-        }
-        else
-        {
+    while (index < tokens.size() && tokens[index] != "}") {
+        if (tokens[index] == "location") {
+            parseLocation(tokens, index, new_server);
+        } else {
             parseServerKeyword(tokens, index, new_server);
         }
     }
-    if (index >= tokens.size() || tokens[index] != "}")
-    {
+    if (index >= tokens.size() || tokens[index] != "}") {
         std::cout << "error : expected '}' after server" << std::endl;
         exit(1);
     }
@@ -155,26 +131,23 @@ void ConfigParser::parseServer(const std::vector<std::string>& tokens, size_t &i
     @param2 : index of tokens
     @param3 : server config
 */
-void ConfigParser::parseLocation(const std::vector<std::string>& tokens, size_t &index, ServerConfig& server)
-{
+void ConfigParser::parseLocation(const std::vector<std::string>& tokens, size_t& index,
+                                 ServerConfig& server) {
     LocationConfig new_location;
     index++;
     if (index >= tokens.size())
         throw std::runtime_error("error : expected path after location");
     new_location.setPath(tokens[index]);
     index++;
-    if (index >= tokens.size() || tokens[index] != "{")
-    {
+    if (index >= tokens.size() || tokens[index] != "{") {
         std::cout << "error : expected '{' after location path" << std::endl;
         exit(1);
     }
     index++;
-    while (index < tokens.size() && tokens[index] != "}")
-    {
+    while (index < tokens.size() && tokens[index] != "}") {
         parseLocationKeyword(tokens, index, new_location);
     }
-    if (index >= tokens.size() || tokens[index] != "}")
-    {
+    if (index >= tokens.size() || tokens[index] != "}") {
         std::cout << "error : expected '}' after location" << std::endl;
         exit(1);
     }
@@ -188,38 +161,29 @@ void ConfigParser::parseLocation(const std::vector<std::string>& tokens, size_t 
     @param2: index of tokens
     @param3: server config
 */
-void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, size_t& index, ServerConfig& server)
-{
+void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, size_t& index,
+                                      ServerConfig& server) {
     const std::string& found = tokens[index];
-    if (found == "listen")
-    {
+    if (found == "listen") {
         index++;
         if (index < tokens.size())
             server.addPort(std::stoi(tokens[index]));
         index++;
-    }
-    else if (found == "host")
-    {
+    } else if (found == "host") {
         index++;
         if (index < tokens.size())
             server.setHost(tokens[index]);
         index++;
-    }
-    else if (found == "server_name")
-    {
+    } else if (found == "server_name") {
         index++;
-        while (index < tokens.size() && tokens[index] != ";")
-        {
+        while (index < tokens.size() && tokens[index] != ";") {
             server.addServerName(tokens[index]);
             index++;
         }
-    }
-    else if (found == "client_max_body_size")
-    {
+    } else if (found == "client_max_body_size") {
         index++;
-        if (index < tokens.size())
-        {
-            uint64_t cmbs = std::stoull(tokens[index]); 
+        if (index < tokens.size()) {
+            uint64_t cmbs = std::stoull(tokens[index]);
             char unit = tokens[index].back();
 
             if (unit == 'K' || unit == 'k')
@@ -231,29 +195,22 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
             server.setClientMaxBodySize(cmbs);
         }
         index++;
-    }
-    else if (found == "error_page")
-    {
+    } else if (found == "error_page") {
         index++;
         std::vector<std::string> args;
-        
-        while (index < tokens.size() && tokens[index] != ";")
-        {
+
+        while (index < tokens.size() && tokens[index] != ";") {
             args.push_back(tokens[index]);
             index++;
         }
-        if (args.size() >= 2)
-        {
+        if (args.size() >= 2) {
             std::string file_path = args.back();
             args.pop_back();
-            for (size_t i = 0; i < args.size(); i++)
-            {
+            for (size_t i = 0; i < args.size(); i++) {
                 server.addErrorPagePath(std::stoi(args[i]), file_path);
             }
         }
-    }
-    else
-    {
+    } else {
         std::cout << "error : unknown server keyword  in  parseServerKeyword()" << std::endl;
         exit(1);
     }
@@ -268,72 +225,54 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
     @param2: index of tokens
     @param3: location config
 */
-void ConfigParser::parseLocationKeyword(const std::vector<std::string>& tokens, size_t& index, LocationConfig& location)
-{
+void ConfigParser::parseLocationKeyword(const std::vector<std::string>& tokens, size_t& index,
+                                        LocationConfig& location) {
     const std::string& found = tokens[index];
-    if (found == "root")
-    {
+    if (found == "root") {
         index++;
         if (index < tokens.size() && tokens[index] != ";")
             location.setRoot(tokens[index]);
         index++;
-    }
-    else if (found == "index")
-    {
+    } else if (found == "index") {
         index++;
-        while (index < tokens.size() && tokens[index] != ";")
-        {
+        while (index < tokens.size() && tokens[index] != ";") {
             location.addIndex(tokens[index]);
             index++;
         }
-    }
-    else if (found == "allow_methods")
-    {
+    } else if (found == "allow_methods") {
         index++;
-        while (index < tokens.size() && tokens[index] != ";")
-        {
+        while (index < tokens.size() && tokens[index] != ";") {
             location.addAllowMethods(tokens[index]);
             index++;
         }
-    }
-    else if (found == "autoindex")
-    {
+    } else if (found == "autoindex") {
         index++;
-        if (index < tokens.size() && tokens[index] != ";")
-        {
+        if (index < tokens.size() && tokens[index] != ";") {
             if (tokens[index] == "on")
                 location.setAutoindex(true);
             else if (tokens[index] == "off")
                 location.setAutoindex(false);
         }
         index++;
-    }
-    else if (found == "return")
-    {
+    } else if (found == "return") {
         index++;
         uint16_t status_code = 0;
         std::string target_url = "";
-        if (index < tokens.size() && tokens[index] != ";")
-        {
+        if (index < tokens.size() && tokens[index] != ";") {
             status_code = static_cast<uint16_t>(std::stoi(tokens[index]));
             index++;
         }
-        if (index < tokens.size() && tokens[index] != ";")
-        {
+        if (index < tokens.size() && tokens[index] != ";") {
             target_url = tokens[index];
             index++;
         }
         location.setRedirection(status_code, target_url);
-    }
-    else if (found == "cgi_pass" || found == "cgi_path")
-    {
+    } else if (found == "cgi_pass" || found == "cgi_path") {
         index++;
         if (index < tokens.size() && tokens[index] != ";")
             location.setCgiPass(tokens[index]);
         index++;
-    }
-    else
-    {
+    } else {
         std::cout << "error : unknown location keyword  in  parseLocationKeyword()" << std::endl;
         exit(1);
     }
