@@ -1,14 +1,14 @@
 ## Config file ##
 
 # ServerConfig.hpp #
-1. listen : 
+1. listen :
     a. Allowed port numbers are 0-65535.
     b. Must start with non-zero.
     c. Must be numeric.
 2. host :
     a. [IP_ADDRESS] could be multiple.
 3. server_name :
-    a. Could be multiple. 
+    a. Could be multiple.
 4. client_max_body_size :
     a. Body size limit
 5. error_page:
