@@ -19,7 +19,7 @@ int main(int argc, char **argv)
     {
         if (0 < i)
             outfile << "\n";
-        outfile << "server " << "[" << i  << "]" << std::endl;
+        outfile << "#server " << "[" << i  << "]" << std::endl;
         outfile << "host    " << servers[i].getHost() << std::endl;
         
         const std::vector<uint16_t>& ports = servers[i].getPort();
