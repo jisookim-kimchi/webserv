@@ -1,4 +1,4 @@
-server [0]
+#server [0]
 host    127.0.0.1
 listen    8080
 server_name     localhost
@@ -29,7 +29,7 @@ cgi_pass    /usr/bin/php-cgi
 autoindex    off
 allow_methods    GET POST
 
-server [1]
+#server [1]
 host    127.0.0.1
 listen    8081
 server_name     test.local
