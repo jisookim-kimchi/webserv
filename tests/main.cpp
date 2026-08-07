@@ -1,6 +1,6 @@
 #include "../includes/ConfigParser.hpp"
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -46,14 +46,22 @@ int main(int argc, char** argv) {
                         << locs[k].getRedirection().second << std::endl;
             if (!locs[k].getAllowMethods().empty()) {
                 outfile << "allow_methods    ";
-                for (const auto& m : locs[k].getAllowMethods())
-                    outfile << m << " ";
+                const std::vector<std::string>& methods = locs[k].getAllowMethods();
+                for (size_t i = 0; i < methods.size(); ++i) {
+                    if (i != 0)
+                        outfile << ' ';
+                    outfile << methods[i];
+                }
                 outfile << std::endl;
             }
             if (!locs[k].getIndex().empty()) {
                 outfile << "index    ";
-                for (const auto& idx : locs[k].getIndex())
-                    outfile << idx << " ";
+                const std::vector<std::string>& indexes = locs[k].getIndex();
+                for (size_t i = 0; i < indexes.size(); ++i) {
+                    if (i != 0)
+                        outfile << ' ';
+                    outfile << indexes[i];
+                }
                 outfile << std::endl;
             }
         }
