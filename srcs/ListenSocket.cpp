@@ -1,5 +1,4 @@
 #include "../includes/ListenSocket.hpp"
-#include <cerrno>
 
 /*
     @brief Socket create
@@ -10,9 +9,9 @@
 */
 void ListenSocket::createSocket()
 {
-    _fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (_fd == -1)
-        throw std::runtime_error("Error : createSocket()");
+    fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd_ == -1)
+        throw std::runtime_error("Error : ListenSocket::createSocket()");
 }
 
 /*
@@ -23,8 +22,8 @@ void ListenSocket::createSocket()
 void ListenSocket::setSocketOption()
 {
     int opt = 1;
-    if (::setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-        throw std::runtime_error("Error : setSocketOption()");
+    if (::setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+        throw std::runtime_error("Error : ListenSocket::setSocketOption()");
 }
 
 /*
@@ -33,8 +32,8 @@ void ListenSocket::setSocketOption()
 */
 void ListenSocket::setNonBlocking()
 {
-    if (::fcntl(_fd, F_SETFL, O_NONBLOCK) < 0)
-        throw std::runtime_error("Error : setNonBlocking()");
+    if (::fcntl(fd_, F_SETFL, O_NONBLOCK) < 0)
+        throw std::runtime_error("Error : ListenSocket::setNonBlocking()");
 }
 
 /*
@@ -44,17 +43,17 @@ void ListenSocket::setNonBlocking()
 */
 void ListenSocket::bind(int port, const std::string& host)
 {
-    _port = port;
-    _addr.sin_family = AF_INET;
+    port_ = port;
+    addr_.sin_family = AF_INET;
     if (host.empty() || host == DEFAULT_HOST)
-        _addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        addr_.sin_addr.s_addr = htonl(INADDR_ANY);
     else
-        _addr.sin_addr.s_addr = inet_addr(host.c_str());
-    _addr.sin_port = htons(_port);
-    if (::bind(_fd, (struct sockaddr *)&_addr, sizeof(_addr)) < 0)
-        throw std::runtime_error("Error : bind()");
+        addr_.sin_addr.s_addr = inet_addr(host.c_str());
+    addr_.sin_port = htons(port_);
+    if (::bind(fd_, (struct sockaddr *)&addr_, sizeof(addr_)) < 0)
+        throw std::runtime_error("Error : ListenSocket::bind()");
     else
-        std::cout << "bind success : " << _port << std::endl;
+        std::cout << "ListenSocket bind success : " << port_ << std::endl;
 }
 
 /*
@@ -64,10 +63,10 @@ void ListenSocket::bind(int port, const std::string& host)
 */
 void ListenSocket::listen()
 {
-    if (::listen(_fd, SOMAXCONN ) < 0)
-        throw std::runtime_error("Error : listen()");
+    if (::listen(fd_, SOMAXCONN ) < 0)
+        throw std::runtime_error("Error : ListenSocket::listen()");
     else
-        std::cout << "listen success : " << _port << std::endl;
+        std::cout << "ListenSocket listen success : " << port_ << std::endl;
 }
 
 /*
@@ -78,14 +77,15 @@ void ListenSocket::listen()
 int ListenSocket::accept(struct sockaddr_in &clientAddr)
 {
     socklen_t clientAddrLen = sizeof(clientAddr);
-    int client_socket_fd = ::accept(_fd, (struct sockaddr *)&clientAddr, &clientAddrLen);
+    int client_socket_fd = ::accept(fd_, (struct sockaddr *)&clientAddr, &clientAddrLen);
     if (client_socket_fd == -1)
     {
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        if (errno == EWOULDBLOCK || errno == EAGAIN)
             return -1;
-        throw std::runtime_error("Error : accept()");
+        throw std::runtime_error("Error : ListenSocket::accept()");
     }
-    std::cout << "accept success : " << client_socket_fd << std::endl;
+    else
+        std::cout << "ListenSocket::accept success : " << client_socket_fd << std::endl;
     return client_socket_fd;
 }
 
@@ -95,11 +95,11 @@ int ListenSocket::accept(struct sockaddr_in &clientAddr)
 */
 void ListenSocket::close()
 {
-    if (_fd != -1)
+    if (fd_ != -1)
     {
-        ::close(_fd);
-        _fd = -1;
-        std::cout << "Server close success! (Port : " << _port << ")" << std::endl;
+        ::close(fd_);
+        fd_ = -1;
+        std::cout << "ListenSocket close success! (Port : " << port_ << ")" << std::endl;
     }
 }
 
