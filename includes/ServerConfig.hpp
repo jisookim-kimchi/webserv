@@ -7,7 +7,8 @@
 
 #include "LocationConfig.hpp"
 
-class ServerConfig {
+class ServerConfig
+{
    public:
     ServerConfig();
     ~ServerConfig();

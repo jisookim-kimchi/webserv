@@ -8,3 +8,11 @@
 ![accept error 11 - gdb debug](./Trouble/webserv_accept_error_11_2.jpg)
 
 
+
+2. regarding FD
+
+FD is a Unique System Resource, so i blocked Copy Constructor and = operator for Server class.
+
+so i set listenSockets_ = std::vector<std::unique_ptr<ListenSocket>>;
+unique_ptr cannot copyable and assignable.
+so we can use std::move for transferring ownership.
