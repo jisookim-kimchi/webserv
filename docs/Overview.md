@@ -8,7 +8,10 @@ This document describes the modular architecture for this project. The goal is t
 webserv/
 ├── Makefile
 ├── includes/
-│   ├── Config.hpp
+│   ├── ConfigParser.hpp
+│   ├── ServerConfig.hpp
+│   ├── LocationConfig.hpp
+│   ├── ListenSocket.hpp
 │   ├── Server.hpp
 │   ├── Client.hpp
 │   ├── HttpRequest.hpp
@@ -17,7 +20,10 @@ webserv/
 │   └── Utils.hpp
 ├── srcs/
 │   ├── main.cpp
-│   ├── Config.cpp
+│   ├── ConfigParser.cpp
+│   ├── ServerConfig.cpp
+│   ├── LocationConfig.cpp
+│   ├── ListenSocket.cpp
 │   ├── Server.cpp
 │   ├── Client.cpp
 │   ├── HttpRequest.cpp
@@ -62,15 +68,26 @@ Responsible for configuration parsing and storage. The core data structures incl
   - A list of `LocationConfig` entries.
 - `Config`: reads the `.conf` file, performs lexical and syntax parsing, and generates multiple `ServerConfig` objects.
 
+### `ListenSocket.hpp` / `ListenSocket.cpp`
+
+Encapsulates listening sockets for each port, responsible for:
+
+- Creating TCP IPv4 sockets (`socket`).
+- Setting socket options (`SO_REUSEADDR`).
+- Setting sockets to non-blocking mode (`fcntl(O_NONBLOCK)`).
+- Binding address and port (`bind`).
+- Listening for incoming connections (`listen`).
+- Accepting incoming client connections (`accept`), safely handling non-blocking status (`EAGAIN` / `EWOULDBLOCK`).
+
 ### `Server.hpp` / `Server.cpp`
 
 Core of the server engine, responsible for:
 
-- Socket initialization: `socket` -> `setsockopt` -> `fcntl(O_NONBLOCK)` -> `bind` -> `listen`.
-- Maintaining the main event loop `run()`, using `poll()` to manage all listening sockets and client sockets.
+- Managing multiple `ListenSocket` instances for configured server ports.
+- Maintaining the main event loop `run()`, using multiplexing (`poll`/`epoll`/`kqueue`) to manage listening sockets and client connections.
 - Dispatching events:
-  - When a listening socket becomes readable, call `accept()` to establish a new connection.
-  - When a client socket becomes readable or writable, hand it over to the corresponding `Client` instance.
+  - When a listening socket becomes readable, accepting new connections via `ListenSocket::accept()`.
+  - When a client socket becomes readable or writable, handing it over to the corresponding connection handler.
 - Reaping timed-out or disconnected connections, closing file descriptors, and cleaning up resources.
 
 ### `Client.hpp` / `Client.cpp`

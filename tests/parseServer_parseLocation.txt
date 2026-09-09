@@ -1,6 +1,7 @@
-#server [0]
+server [0]
 host    127.0.0.1
 listen    8080
+listen    4242
 server_name     localhost
 client_max_body_size    10485760
 error_page     404 /errors/404.html
@@ -29,7 +30,7 @@ cgi_pass    /usr/bin/php-cgi
 autoindex    off
 allow_methods    GET POST
 
-#server [1]
+server [1]
 host    127.0.0.1
 listen    8081
 server_name     test.local
