@@ -5,19 +5,18 @@
 #include <vector>
 #include <memory>
 
-class Server
-{
-public:
+class Server {
+   public:
     Server();
     ~Server();
-    explicit Server(const std::vector<ServerConfig> &configs);
+    explicit Server(const std::vector<ServerConfig>& configs);
 
     void run();
-    
-private:
-    const Server &operator=(const Server &other);
-    Server(const Server &other);
 
+   private:
+    const Server& operator=(const Server& other);
+    Server(const Server& other);
     std::vector<std::unique_ptr<ListenSocket>> listenSockets_;
     std::vector<ServerConfig> serverConfigs_;
+    bool isListenSocket(int fd);
 };
