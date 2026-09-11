@@ -1,6 +1,7 @@
 server [0]
 host    127.0.0.1
 listen    8080
+listen    4242
 server_name     localhost
 client_max_body_size    10485760
 error_page     404 /errors/404.html
@@ -9,12 +10,12 @@ error_page     502 /errors/50x.html
 error_page     503 /errors/50x.html
 error_page     504 /errors/50x.html
 location    /
-root    www
+root    /home/jisookim/42webserv/www
 autoindex    on
 allow_methods    GET POST
 index    index.html index.htm
 location    /upload
-root    www/upload
+root    /home/jisookim/42webserv/www/upload
 autoindex    off
 allow_methods    GET POST DELETE
 location    /redirect
@@ -36,7 +37,7 @@ server_name     test.local
 client_max_body_size    1048576
 error_page     404 /errors/404.html
 location    /
-root    www
+root    /home/jisookim/42webserv/www_test
 autoindex    off
 allow_methods    GET
 index    index.html
