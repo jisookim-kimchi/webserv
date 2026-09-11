@@ -1,8 +1,6 @@
 #include "../includes/ConfigParser.hpp"
 #include <fstream>
 #include <iostream>
-#include "../includes/Server.hpp"
-#include "../includes/ListenSocket.hpp"
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -69,8 +67,5 @@ int main(int argc, char** argv) {
         }
     }
     outfile.close();
-
-    Server server(Configs);
-    server.run();
     return 0;
 }
