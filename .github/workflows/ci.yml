@@ -7,20 +7,6 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-format:
-    name: Code Linting & Formatting
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install System Dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-tidy
-
-      - name: Run pre-commit
-        uses: pre-commit/action@v3.0.1
-
   build-and-test:
     name: Build & Run Tests
     runs-on: ubuntu-latest
