@@ -50,7 +50,7 @@ void ListenSocket::bind(int port, const std::string& host) {
     if (::bind(_fd, (struct sockaddr*)&_addr, sizeof(_addr)) < 0)
         throw std::runtime_error("Error : bind()");
     else
-        std::cout << "bind success : " << _port << std::endl;
+        std::cout << "bind success : " << _port << '\n';
 }
 
 /*
@@ -63,7 +63,7 @@ void ListenSocket::listen() {
     if (::listen(_fd, SOMAXCONN) < 0)
         throw std::runtime_error("Error : listen()");
     else
-        std::cout << "listen success : " << _port << std::endl;
+        std::cout << "listen success : " << _port << '\n';
 }
 
 /*
@@ -79,7 +79,7 @@ int ListenSocket::accept(struct sockaddr_in& clientAddr) {
             return -1;
         throw std::runtime_error("Error : accept()");
     }
-    std::cout << "accept success : " << client_socket_fd << std::endl;
+    std::cout << "accept success : " << client_socket_fd << '\n';
     return client_socket_fd;
 }
 
@@ -91,6 +91,6 @@ void ListenSocket::close() {
     if (_fd != -1) {
         ::close(_fd);
         _fd = -1;
-        std::cout << "Server close success! (Port : " << _port << ")" << std::endl;
+        std::cout << "Server close success! (Port : " << _port << ")\n";
     }
 }
