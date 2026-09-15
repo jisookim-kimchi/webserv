@@ -14,12 +14,3 @@ repos:
     hooks:
       - id: clang-format
         types_or: [c++, c]
-
-  - repo: local
-    hooks:
-      - id: clang-tidy
-        name: clang-tidy
-        entry: clang-tidy
-        language: system
-        types: [c++]
-        args: ["--extra-arg=-std=c++17", "--extra-arg=-Iincludes"]

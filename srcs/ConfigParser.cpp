@@ -27,7 +27,7 @@ void ConfigParser::parse(const std::string& filename) {
         if (tokens[index] == "server") {
             parseServer(tokens, index);
         } else {
-            std::cout << "error : unexpected token outside server: " << tokens[index] << std::endl;
+            std::cout << "error : unexpected token outside server: " << tokens[index] << '\n';
             exit(1);
         }
     }
@@ -35,7 +35,7 @@ void ConfigParser::parse(const std::string& filename) {
     std::ofstream outfile("tests/test_tokenize.txt");
 
     for (size_t i = 0; i < tokens.size(); ++i) {
-        outfile << "[" << i << "] ----> " << tokens[i] << std::endl;
+        outfile << "[" << i << "] ----> " << tokens[i] << '\n';
     }
 
     outfile.close();
@@ -106,7 +106,7 @@ void ConfigParser::parseServer(const std::vector<std::string>& tokens, size_t& i
     ServerConfig new_server;
     index++;
     if (index >= tokens.size() || tokens[index] != "{") {
-        std::cout << "error : expected '{' after server" << std::endl;
+        std::cout << "error : expected '{' after server\n";
         exit(1);
     }
     index++;
@@ -118,7 +118,7 @@ void ConfigParser::parseServer(const std::vector<std::string>& tokens, size_t& i
         }
     }
     if (index >= tokens.size() || tokens[index] != "}") {
-        std::cout << "error : expected '}' after server" << std::endl;
+        std::cout << "error : expected '}' after server\n";
         exit(1);
     }
     index++;
@@ -140,7 +140,7 @@ void ConfigParser::parseLocation(const std::vector<std::string>& tokens, size_t&
     new_location.setPath(tokens[index]);
     index++;
     if (index >= tokens.size() || tokens[index] != "{") {
-        std::cout << "error : expected '{' after location path" << std::endl;
+        std::cout << "error : expected '{' after location path\n";
         exit(1);
     }
     index++;
@@ -148,7 +148,7 @@ void ConfigParser::parseLocation(const std::vector<std::string>& tokens, size_t&
         parseLocationKeyword(tokens, index, new_location);
     }
     if (index >= tokens.size() || tokens[index] != "}") {
-        std::cout << "error : expected '}' after location" << std::endl;
+        std::cout << "error : expected '}' after location\n";
         exit(1);
     }
     index++;
@@ -211,7 +211,7 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
             }
         }
     } else {
-        std::cout << "error : unknown server keyword  in  parseServerKeyword()" << std::endl;
+        std::cout << "error : unknown server keyword  in  parseServerKeyword()\n";
         exit(1);
     }
 
@@ -273,7 +273,7 @@ void ConfigParser::parseLocationKeyword(const std::vector<std::string>& tokens, 
             location.setCgiPass(tokens[index]);
         index++;
     } else {
-        std::cout << "error : unknown location keyword  in  parseLocationKeyword()" << std::endl;
+        std::cout << "error : unknown location keyword  in  parseLocationKeyword()\n";
         exit(1);
     }
 
