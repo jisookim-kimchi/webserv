@@ -5,7 +5,6 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <string>
 #include <iostream>
 #include <stdexcept>

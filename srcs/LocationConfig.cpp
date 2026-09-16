@@ -10,8 +10,7 @@ LocationConfig::LocationConfig()
       autoindex_(false) {
 }
 
-LocationConfig::~LocationConfig() {
-}
+LocationConfig::~LocationConfig() = default;
 
 LocationConfig::LocationConfig(const LocationConfig& other) {
     *this = other;
