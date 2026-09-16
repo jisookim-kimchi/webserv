@@ -1,0 +1,14 @@
+# Build artifacts
+build/
+test_parser
+cgi_demo
+
+# Python
+__pycache__/
+*.pyc
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
