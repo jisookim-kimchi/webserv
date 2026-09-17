@@ -1,5 +1,17 @@
 #include "HTTP_Request.hpp"
 
+/*
+    Getter
+*/
+std::string HTTP_Request::getHeader(const std::string& key) const
+{
+    std::string lowerKey = Utils::toLower(key);
+    std::map<std::string, std::string>::const_iterator it = headers_.find(lowerKey);
+    if (it != headers_.end())
+        return it->second;
+    return "";
+}
+
 std::string HTTP_Request::getMethodString() const
 {
     if (method_ == HTTP_METHOD::GET)
@@ -86,14 +98,30 @@ bool HTTP_Request::parse(const std::string &buffer)
     if (headerEnd == std::string::npos)
         return false;
     size_t headerStart = find_r_n + 2;
+    bool hasHost = false;
     while (headerStart < headerEnd)
     {
         size_t rn = buffer.find("\r\n", headerStart);
-        
-        
+        if (rn == std::string::npos)
+            return false;
+        std::string line = buffer.substr(headerStart, rn - headerStart);
+        size_t colon = line.find(':');
+        if (colon == std::string::npos)
+            return false;
+        std::string key = Utils::toLower(line.substr(0, colon));
+        std::string val = Utils::trimLeft(line.substr(colon + 1));
+        if(key == "host")
+        {
+            if (hasHost)
+                return false;
+            hasHost = true;
+        }
+        headers_[key] = val;
+        headerStart = rn + 2;
     }
-    
-    
-
-    
+    if (!hasHost)
+        return false;
+    body_ = buffer.substr(headerEnd + 4);
+    return true;
 }
+

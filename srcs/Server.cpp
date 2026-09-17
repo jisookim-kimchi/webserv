@@ -128,8 +128,15 @@ void Server::run() {
                     } else {
                         client.appendRequestBuffer(buf, ret);
                         if (client.getRequestBuffer().find("\r\n\r\n") != std::string::npos) {
-                            std::string response =
-                                "HTTP/1.1 200 OK\r\nContent-Length: 14\r\n\r\nHello Client!\n";
+                            HTTP_Request req;
+                            if (req.parse(client.getRequestBuffer()))
+                            {
+                                //TODO:generate HTTP response
+                            }
+                            else
+                            {
+                                //TODO: generate HTTP 400 Bad Response
+                            }
                             client.setResponseBuffer(response);
                             client.setState(ClientState::WRITING_RESPONSE);
                             struct epoll_event ev {};
