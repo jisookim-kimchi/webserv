@@ -4,18 +4,18 @@
 #include <map>
 #include "Utils.hpp"
 
-enum class HTTP_METHOD
+enum class HTTP_METHOD : unsigned int
 {
-  GET,
-  POST,
-  DELETE,
-  HEAD,
-  PUT,
-  PATCH,
-  OPTIONS,
-  TRACE,
-  CONNECT,
-  UNKNOWN,
+    UNKNOWN = 0,
+    GET     = 1 << 0,
+    POST    = 1 << 1,
+    DELETE  = 1 << 2,
+    HEAD    = 1 << 3,
+    PUT     = 1 << 4,
+    PATCH   = 1 << 5,
+    OPTIONS = 1 << 6,
+    TRACE   = 1 << 7,
+    CONNECT = 1 << 8
 };
 
 class HTTP_Request
