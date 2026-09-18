@@ -1,14 +1,13 @@
 #include "../includes/Server.hpp"
 #include <arpa/inet.h>
 #include <cerrno>
-#include <iostream>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "../includes/HTTP_Request.hpp"
 
 constexpr int MAX_EVENTS = 256;
 constexpr size_t BUF_SIZE = 4096;
@@ -137,7 +136,7 @@ void Server::run() {
                             {
                                 //TODO: generate HTTP 400 Bad Response
                             }
-                            client.setResponseBuffer(response);
+                            //client.setResponseBuffer(response);
                             client.setState(ClientState::WRITING_RESPONSE);
                             struct epoll_event ev {};
                             ev.events = EPOLLOUT;
