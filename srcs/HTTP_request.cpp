@@ -1,8 +1,10 @@
 #include "HTTP_Request.hpp"
 
-/*
-    Get Header
-*/
+/**
+ * @brief fetches header value by key.
+ * @param key The header field name.
+ * @return The header value, or empty string if not found.
+ */
 std::string HTTP_Request::getHeader(const std::string& key) const
 {
     std::string lowerKey = key;
@@ -17,6 +19,10 @@ std::string HTTP_Request::getHeader(const std::string& key) const
     return "";
 }
 
+/**
+ * @brief  convert HTTP_METHOD enum value to string.
+ * @return String representation of the method.
+ */
 std::string HTTP_Request::getMethodString() const
 {
     switch (method_)
@@ -44,6 +50,12 @@ std::string HTTP_Request::getMethodString() const
     }
 }
 
+/**
+ * @brief parses HTTP method token from buffer to HTTP_METHOD enum.
+ * @param buffer raw request buffer.
+ * @param len Length of the method token.
+ * @return HTTP_METHOD enum value, or UNKNOWN if not supported.
+ */
 static HTTP_METHOD parseMethod(const std::string &buffer, size_t len)
 {
     if (buffer.compare(0, len, "GET") == 0)
@@ -68,6 +80,12 @@ static HTTP_METHOD parseMethod(const std::string &buffer, size_t len)
         return HTTP_METHOD::UNKNOWN;
 }
 
+/**
+ * @brief converts a hex char to int value.
+ * @param c hex char.
+ * @param digit int value.
+ * @return true if valid hex char, false otherwise.
+ */
 static bool hexCharToInt(char c, size_t &digit)
 {
     if (c >= '0' && c <= '9')
@@ -84,10 +102,15 @@ static bool hexCharToInt(char c, size_t &digit)
     return false;
 }
 
-/*
-    @brief : to check Chunk Size range is `0~f`
-*/
-static bool hexStrRangeToSize (const std::string &str, size_t pos, size_t len, size_t &outSize)
+/**
+ * @brief converts a hex string range to size_t integer.
+ * @param str source string containing hex numbers.
+ * @param pos starting offset of hex string.
+ * @param len length of hex string.
+ * @param outSize size_t integer.
+ * @return true if valid hex number, false otherwise.
+ */
+static bool hexStrRangeToSize(const std::string &str, size_t pos, size_t len, size_t &outSize)
 {
     if (len == 0 || pos + len > str.size())
         return false;
@@ -102,11 +125,14 @@ static bool hexStrRangeToSize (const std::string &str, size_t pos, size_t len, s
     return true;
 }
 
-/*
-    @brief decode the uri path!
-    input : /my%20folder/test.html
-    output : /my folder/test.html
-*/
+/**
+ * @brief decodes percent-encoded characters (%...) in URI path.
+ * @param src source string containing encoded URI.
+ * @param pos starting offset of URI path.
+ * @param len length of URI path.
+ * @param out reference to string where decoded path will be stored.
+ * @return true if decoding succeeded, if not, failed.
+ */
 static bool urlDecode(const std::string &src, size_t pos, size_t len, std::string &out)
 {
     out.clear();
@@ -132,6 +158,12 @@ static bool urlDecode(const std::string &src, size_t pos, size_t len, std::strin
     return true;
 }
 
+/**
+ * @brief parses HTTP Request Line (Method, URI/Path/Query, Version).
+ * @param buffer raw request buffer.
+ * @param headerStart output parameter updated to the byte offset where headers begin.
+ * @return true if Request-Line is valid HTTP/1.1, if not, failed.
+ */
 bool HTTP_Request::parseRequestLine(const std::string &buffer, size_t &headerStart)
 {
     size_t find_r_n = buffer.find("\r\n");
@@ -166,6 +198,13 @@ bool HTTP_Request::parseRequestLine(const std::string &buffer, size_t &headerSta
     return true;
 }
 
+/**
+ * @brief parses HTTP headers into map and validates mandatory headers (Host).
+ * @param buffer raw request buffer.
+ * @param headerStart starting byte offset of headers section.
+ * @param headerEnd byte offset where header section ends ("\r\n\r\n").
+ * @return true if all headers are valid, if not, failed.
+ */
 bool HTTP_Request::parseHeaders(const std::string &buffer, size_t headerStart, size_t headerEnd)
 {
     bool hasHost = false;
@@ -208,6 +247,12 @@ bool HTTP_Request::parseHeaders(const std::string &buffer, size_t headerStart, s
     return hasHost;
 }
 
+/**
+ * @brief parses HTTP Body handling Content-Length and Chunked Transfer-Encoding.
+ * @param buffer raw request buffer.
+ * @param headerEnd byte offset where headers end ("\r\n\r\n").
+ * @return true if body was successfully read and validated, if not, failed.
+ */
 bool HTTP_Request::parseBody(const std::string &buffer, size_t headerEnd)
 {
     std::map<std::string, std::string>::const_iterator conLenIt = headers_.find("content-length");
@@ -260,6 +305,11 @@ bool HTTP_Request::parseBody(const std::string &buffer, size_t headerEnd)
     return true;
 }
 
+/**
+ * @brief top-level request parser called Request Line, Headers, and Body parsing.
+ * @param buffer complete raw HTTP request string.
+ * @return true if parsing succeeded,if not, failed.
+ */
 bool HTTP_Request::parse(const std::string &buffer)
 {
     size_t headerEnd = buffer.find("\r\n\r\n");
