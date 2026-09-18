@@ -1,6 +1,6 @@
 # Client.
 
-![image](./imgae/Client_Lifecycle.png)  
+![image](./image/Client_Lifecycle.png)  
 : The Client class stores all the private data (buffers, socket fd, state) for one single user connection so that multiple clients' data never get mixed up in our single-threaded server.  
 
 The Reality of TCP: TCP is a stream. A client’s HTTP request rarely arrives all in one piece.  

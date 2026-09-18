@@ -3,7 +3,7 @@
 
 ## overall acrhitecture.
 
-![Server_arch](./imgae/Server_arch.png)
+![Server_arch](./image/Server_arch.png)
 
 The Server is built on an "event-driven, non-blocking I/O multiplexing" using `epoll`.
 - **I/O Multiplexing**: Allows a single thread and single process to monitor and manage multiple socket connections simultaneously without getting blocked.  
