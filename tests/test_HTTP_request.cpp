@@ -172,6 +172,43 @@ void test_len_and_chunked() {
     HTTP_Request req;
     EXPECT_TRUE(!req.parse(raw));
 }
+void test_complex_chunked()
+{
+    std::string raw = 
+        "POST /upload/stream HTTP/1.1\r\n"
+        "Host: localhost:8080\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "Content-Type: application/octet-stream\r\n"
+        "\r\n"
+        "1a\r\n"
+        "abcdefghijklmnopqrstuvwxyz\r\n"
+        "F\r\n"
+        "0123456789ABCDE\r\n"
+        "5\r\n" 
+        "FINAL\r\n"
+        "0\r\n"
+        "\r\n";
+    HTTP_Request req;
+    EXPECT_TRUE(req.parse(raw));
+    EXPECT_EQ(req.getBody(), "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFINAL");
+    EXPECT_EQ(req.getBody().size(), 46UL);
+}
+
+void test_complex_uri_and_query() {
+    std::string raw = 
+        "GET /api/v1/user%2Fprofile/special%21%40%23?name=jisoo%20kim&age=42&sort=asc%26desc HTTP/1.1\r\n"
+        "Host: 42heilbronn.de:443\r\n"
+        "Accept: text/html,application/xhtml+xml\r\n"
+        "\r\n";
+
+    HTTP_Request req;
+    EXPECT_TRUE(req.parse(raw));
+    EXPECT_EQ(req.getPath(), "/api/v1/user/profile/special!@#");
+    EXPECT_EQ(req.getQueryString(), "name=jisoo%20kim&age=42&sort=asc%26desc");
+    EXPECT_EQ(req.getHeader("host"), "42heilbronn.de:443");
+    EXPECT_EQ(req.getHeader("accept"), "text/html,application/xhtml+xml");
+}
+
 
 } // namespace
 
@@ -188,11 +225,11 @@ int main() {
     failed += runTest("test_bad_version", &test_bad_version);
     failed += runTest("test_chunked", &test_chunked);
     failed += runTest("test_url_decode", &test_url_decode);
-    std::cout << "\n -----------------failed-----------------------\n";
     failed += runTest("test_len_mismatch", &test_len_mismatch);
     failed += runTest("test_bad_len", &test_bad_len);
     failed += runTest("test_len_and_chunked", &test_len_and_chunked);
-
+    failed += runTest("test_complex_chunked", &test_complex_chunked);
+    failed += runTest("test_complex_uri_and_query", &test_complex_uri_and_query);
     if (failed == 0) {
         std::cout << "\n All HTTP_Request tests passed!\n";
     } else {

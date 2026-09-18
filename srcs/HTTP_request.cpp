@@ -132,7 +132,6 @@ static bool urlDecode(const std::string &src, size_t pos, size_t len, std::strin
     return true;
 }
 
-
 bool HTTP_Request::parseRequestLine(const std::string &buffer, size_t &headerStart)
 {
     size_t find_r_n = buffer.find("\r\n");
