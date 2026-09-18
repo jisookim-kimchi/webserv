@@ -39,6 +39,11 @@ public:
 
 private:
     HTTP_Request& operator=(const HTTP_Request& other) = default;
+
+    bool parseRequestLine(const std::string& buffer, size_t& headerStart);
+    bool parseHeaders(const std::string& buffer, size_t headerStart, size_t headerEnd);
+    bool parseBody(const std::string& buffer, size_t headerEnd);
+
     HTTP_METHOD method_;
     std::string uri_;
     std::string version_;

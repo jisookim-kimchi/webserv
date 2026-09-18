@@ -186,9 +186,9 @@ int main() {
     failed += runTest("test_dup_host", &test_dup_host);
     failed += runTest("test_bad_method", &test_bad_method);
     failed += runTest("test_bad_version", &test_bad_version);
-    std::cout << "\n ----------------------------------------\n";
     failed += runTest("test_chunked", &test_chunked);
     failed += runTest("test_url_decode", &test_url_decode);
+    std::cout << "\n -----------------failed-----------------------\n";
     failed += runTest("test_len_mismatch", &test_len_mismatch);
     failed += runTest("test_bad_len", &test_bad_len);
     failed += runTest("test_len_and_chunked", &test_len_and_chunked);

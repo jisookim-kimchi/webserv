@@ -1,7 +1,7 @@
 #include "HTTP_Request.hpp"
 
 /*
-    Getter
+    Get Header
 */
 std::string HTTP_Request::getHeader(const std::string& key) const
 {
@@ -68,34 +68,72 @@ static HTTP_METHOD parseMethod(const std::string &buffer, size_t len)
         return HTTP_METHOD::UNKNOWN;
 }
 
+static bool hexCharToInt(char c, size_t &digit)
+{
+    if (c >= '0' && c <= '9')
+    {
+        digit = c - '0';
+        return true;
+    }
+    char lower = c | 0x20;
+    if (lower >= 'a' && lower <= 'f')
+    {
+        digit = lower - 'a' + 10;
+        return true;
+    }
+    return false;
+}
+
 /*
     @brief : to check Chunk Size range is `0~f`
 */
-static bool hexStringToInt(const std::string &str, size_t &outSize)
+static bool hexStrRangeToSize (const std::string &str, size_t pos, size_t len, size_t &outSize)
 {
-    if (str.empty())
+    if (len == 0 || pos + len > str.size())
         return false;
     outSize = 0;
-    for (size_t i = 0; i < str.size(); ++i)
+    for (size_t i = 0; i < len; ++i)
     {
-        char c = str[i];
         size_t digit = 0;
-        if (c >= '0' && c <= '9')
-            digit = c - '0';
-        else
-        {
-            char lower = c | 0x20;
-            if (lower >= 'a' && lower <= 'f')
-                digit = lower - 'a' + 10;
-            else
-                return false;
-        }
+        if (!hexCharToInt(str[pos + i], digit))
+            return false;
         outSize = (outSize << 4) | digit;
     }
     return true;
 }
 
-bool HTTP_Request::parse(const std::string &buffer)
+/*
+    @brief decode the uri path!
+    input : /my%20folder/test.html
+    output : /my folder/test.html
+*/
+static bool urlDecode(const std::string &src, size_t pos, size_t len, std::string &out)
+{
+    out.clear();
+    out.reserve(len);
+    for (size_t i = 0; i < len; ++i)
+    {
+        size_t cur = pos + i;
+        if (src[cur] == '%')
+        {
+            if (i + 2 >= len)
+                return false;
+            size_t high = 0, low = 0;
+            if (!hexCharToInt(src[cur + 1], high) || !hexCharToInt(src[cur + 2], low))
+                return false;
+            out += static_cast<char>((high << 4) | low);
+            i += 2;
+        }
+        else
+        {
+            out += src[cur];
+        }
+    }
+    return true;
+}
+
+
+bool HTTP_Request::parseRequestLine(const std::string &buffer, size_t &headerStart)
 {
     size_t find_r_n = buffer.find("\r\n");
     if (find_r_n == std::string::npos)
@@ -113,27 +151,28 @@ bool HTTP_Request::parse(const std::string &buffer)
     if (uri_.empty() || uri_[0] != '/')
         return false;
     size_t queryPos = uri_.find('?');
+    size_t pathLen = queryPos != std::string::npos ? queryPos : uri_.size();
     if (queryPos != std::string::npos)
-    {
-        path_ = uri_.substr(0, queryPos);
-        queryString_ = uri_.substr(queryPos + 1);
-    }
+        queryString_.assign(uri_, queryPos + 1, uri_.size() - (queryPos + 1));
     else
-    {
-        path_ = uri_;
         queryString_.clear();
-    }
+    if (!urlDecode(uri_, 0, pathLen, path_))
+        return false;
     size_t verLen = find_r_n - secondSpace - 1;
     if (buffer.compare(secondSpace + 1, verLen, "HTTP/1.1") != 0)
         return false;
     version_ = "HTTP/1.1";
-    
-    //parse headers
-    size_t headerEnd = buffer.find("\r\n\r\n");
-    if (headerEnd == std::string::npos)
-        return false;
-    size_t headerStart = find_r_n + 2;
+
+    headerStart = find_r_n + 2;
+    return true;
+}
+
+bool HTTP_Request::parseHeaders(const std::string &buffer, size_t headerStart, size_t headerEnd)
+{
     bool hasHost = false;
+    std::string key;
+    std::string val;
+
     while (headerStart < headerEnd)
     {
         size_t rn = buffer.find("\r\n", headerStart);
@@ -144,16 +183,20 @@ bool HTTP_Request::parse(const std::string &buffer)
         if (colon == std::string::npos || colon > rn)
             return false;
 
-        std::string key = buffer.substr(headerStart, colon - headerStart);
-        for (size_t i = 0; i < key.size(); ++i)
+        size_t keyLen = colon - headerStart;
+        key.resize(keyLen);
+        for (size_t i = 0; i < keyLen; ++i)
         {
-            if (key[i] >= 'A' && key[i] <= 'Z')
-                key[i] |= 0x20;
+            char c = buffer[headerStart + i];
+            if (c >= 'A' && c <= 'Z')
+                c |= 0x20;
+            key[i] = c;
         }
         size_t valStart = colon + 1;
         while (valStart < rn && (buffer[valStart] == ' ' || buffer[valStart] == '\t'))
             valStart++;
-        std::string val = buffer.substr(valStart, rn - valStart);
+        size_t valLen = rn - valStart;
+        val.assign(buffer, valStart, valLen);
         if(key == "host")
         {
             if (hasHost)
@@ -163,34 +206,77 @@ bool HTTP_Request::parse(const std::string &buffer)
         headers_[key] = val;
         headerStart = rn + 2;
     }
-    if (!hasHost)
+    return hasHost;
+}
+
+bool HTTP_Request::parseBody(const std::string &buffer, size_t headerEnd)
+{
+    std::map<std::string, std::string>::const_iterator conLenIt = headers_.find("content-length");
+    bool hasContentLength = (conLenIt != headers_.end());
+    bool isChunked = (getHeader("transfer-encoding") == "chunked");
+
+    if (hasContentLength && isChunked)
         return false;
-    if (getHeader("transfer-encoding") == "chunked")
+
+    if (isChunked)
     {
-        std::string rawBody = buffer.substr(headerEnd + 4);
-        std::string mergedBody;
-        size_t pos = 0;
-        while (pos < rawBody.size())
+        body_.clear();
+        size_t pos = headerEnd + 4;
+        while (pos < buffer.size())
         {
-            size_t rn =rawBody.find("\r\n", pos);
+            size_t rn = buffer.find("\r\n", pos);
             if (rn == std::string::npos)
                 return false;
-            std::string sizeStr = rawBody.substr(pos, rn - pos);
             size_t chunkSize = 0;
-            if (!hexStringToInt(sizeStr, chunkSize))
+            if (!hexStrRangeToSize(buffer, pos, rn - pos, chunkSize))
                 return false;
             if (chunkSize == 0)
                 break;
             size_t dataStart = rn + 2;
-            if (dataStart + chunkSize + 2 > rawBody.size())
+            if (dataStart + chunkSize + 2 > buffer.size())
                 return false;
-            mergedBody.append(rawBody, dataStart, chunkSize);
+            body_.append(buffer, dataStart, chunkSize);
             pos = dataStart + chunkSize + 2;
         }
-        body_ = mergedBody;
     }
     else
-        body_ = buffer.substr(headerEnd + 4);
+    {
+        body_.assign(buffer, headerEnd + 4, buffer.size() - (headerEnd + 4));
+    }
+    if (hasContentLength)
+    {
+        const std::string& realLenStr = conLenIt->second;
+        if (realLenStr.empty())
+            return false;
+        size_t expectedLen = 0;
+        for (size_t i = 0; i < realLenStr.size(); i++)
+        {
+            if (!isdigit(realLenStr[i]))
+                return false;
+            expectedLen = (expectedLen << 3) + (expectedLen << 1) + (realLenStr[i] - '0');
+        }
+        if (body_.size() != expectedLen)
+            return false;
+    }
+    return true;
+}
+
+bool HTTP_Request::parse(const std::string &buffer)
+{
+    size_t headerEnd = buffer.find("\r\n\r\n");
+    if (headerEnd == std::string::npos)
+        return false;
+
+    size_t headerStart = 0;
+    if (!parseRequestLine(buffer, headerStart))
+        return false;
+
+    if (!parseHeaders(buffer, headerStart, headerEnd))
+        return false;
+
+    if (!parseBody(buffer, headerEnd))
+        return false;
+
     return true;
 }
 
