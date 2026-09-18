@@ -1,5 +1,7 @@
 # HTTP
-HTTP is a stateless, request-response protocol for transferring web resources between clients and servers.  
+HTTP is a `stateless`, request-response protocol for transferring web resources between clients and servers.
+* Stateless: each request is independent of the others.  
+* The server does not store any information about the client's previous requests.   
 ## Flow the parsing request.
 ```
  Raw Request Buffer 
