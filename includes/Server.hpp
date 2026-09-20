@@ -29,4 +29,5 @@ class Server {
     void handleClientWrite(int clientFd, int epollFd, std::map<int, std::unique_ptr<Client>>::iterator it);
     void processRequest(Client& client, int epollFd);
     void handleCgi(Client& client, const HTTP_Request& req, const LocationConfig* loc);
+    const ServerConfig& findServerConfig(const Client& client, const HTTP_Request& req) const;
 };

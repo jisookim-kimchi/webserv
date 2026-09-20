@@ -10,9 +10,10 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <netinet/tcp.h>
 
 constexpr int MAX_EVENTS = 256;
-constexpr size_t BUF_SIZE = 4096;
+constexpr size_t BUF_SIZE = 65536;
 
 Server::~Server() {}
 
@@ -124,6 +125,7 @@ void Server::run() {
 /**
     @brief : accept new client connection set non-blocking socket and register it to epoll.
                 client managed by clients_map(key : client file descriptor, value : Client object)
+                TCP_NODELAY can increase performance for small amounts of data.
     @param listenFd : listen socket file descriptor
     @param epollFd : epoll file descriptor
 */
@@ -142,6 +144,8 @@ void Server::handleNewConnection(int listenFd, int epollFd) {
     close(clientFd);
     return;
   }
+  int opt = 1;
+  setsockopt(clientFd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
 
   int port = 0;
   for (const auto &ls : listenSockets_) {
@@ -179,9 +183,10 @@ void Server::handleClientRead(
   }
 
   client.appendRequestBuffer(buf, ret);
-  if (client.getRequestBuffer().find("\r\n\r\n") != std::string::npos) {
+  const std::string &reqBuf = client.getRequestBuffer();
+  size_t searchPos = (reqBuf.size() > (size_t)ret + 3) ? reqBuf.size() - ret - 3 : 0;
+  if (reqBuf.find("\r\n\r\n", searchPos) != std::string::npos)
     processRequest(client, epollFd);
-  }
 }
 
 /**
@@ -195,6 +200,7 @@ void Server::handleClientRead(
 void Server::processRequest(Client &client, int epollFd) {
   HTTP_Request req;
   if (req.parse(client.getRequestBuffer())) {
+    const ServerConfig &config = findServerConfig(client, req);
     HttpResponse::RequestView view;
     view.method = req.getMethodString();
     view.path = req.getPath();
@@ -202,11 +208,11 @@ void Server::processRequest(Client &client, int epollFd) {
     view.errorStatus = 0;
 
     HttpResponse res;
-    res.buildForPath(view, serverConfigs_[0]);
+    res.buildForPath(view, config); 
 
     if (res.needsCgi()) {
       const LocationConfig *loc =
-          LocationMatch::match(req.getPath(), serverConfigs_[0]);
+          LocationMatch::match(req.getPath(), config);
       handleCgi(client, req, loc);
     } else {
       client.setResponseBuffer(res.getRaw());
@@ -227,6 +233,43 @@ void Server::processRequest(Client &client, int epollFd) {
 }
 
 /**
+    @brief : find appropriate ServerConfig using Host header and Client Port.
+    @param client : client object
+    @param req : HTTP request
+*/
+const ServerConfig& Server::findServerConfig(const Client& client, const HTTP_Request& req) const{
+    int clientPort = client.getServerPort();
+    std::string hostHeader = req.getHeader("host");
+    // "localhost:8080" or "jisoo.com"
+    size_t colon = hostHeader.find(':');
+    size_t hostNameLen = (colon != std::string::npos) ? colon : hostHeader.length();
+    const ServerConfig *defaultServer = nullptr;
+    for (const auto& config : serverConfigs_)
+    {
+        const auto& ports = config.getPort();
+        bool portMatch = false;
+        for (uint16_t p : ports)
+        {
+            if (p == clientPort)
+            {
+                portMatch = true;
+                break;
+            }
+        }
+        if(!portMatch)
+            continue;
+        if (!defaultServer)
+            defaultServer = &config;
+        for (const auto &name : config.getServerName())
+        {
+             if (name.length() == hostNameLen && hostHeader.compare(0, hostNameLen, name) == 0)
+                return config;
+        }
+    }
+    return defaultServer ? *defaultServer : serverConfigs_[0];
+}
+
+/**
     @brief : if it'scgi request, call this function.
                 create a CgiHandler instance and request's parsing data insert into CgiHandler instance.
                 call CgiHandler::execute() method and get the result.
@@ -242,7 +285,6 @@ void Server::handleCgi(Client &client, const HTTP_Request &req,
     cgiReq.interpreterPath = loc->getCgiPass();
     std::string root = (loc && !loc->getRoot().empty()) ? loc->getRoot() : "www";
     cgiReq.documentRoot = root;
-    // solved!:  pass real path cgiReq.scriptPath because when it call below cgiHandler::execute(), /home/jisookim/42webserv/www/cgi-bin/www/cgi-bin/hello.py.
     std::string fullPath = root;
     if (!req.getPath().empty() && req.getPath()[0] != '/')
       fullPath += "/";
@@ -260,13 +302,24 @@ void Server::handleCgi(Client &client, const HTTP_Request &req,
   cgiReq.requestBody = req.getBody();
   cgiReq.headers = req.getHeaders();
   cgiReq.serverPort = std::to_string(client.getServerPort());
-  cgiReq.serverName = serverConfigs_[0].getServerName().empty()
-                          ? "localhost"
-                          : serverConfigs_[0].getServerName()[0];
+  const ServerConfig& config = findServerConfig(client, req);
+  cgiReq.serverName = config.getServerName().empty() ? "localhost" : config.getServerName()[0];
 
-  CgiHandler::Result cgiResult = CgiHandler::execute(cgiReq); // check here!
   //TODO add HTTP format here!
-  
+  try {
+    CgiHandler::Result cgiResult = CgiHandler::execute(cgiReq); // check here!
+    std::string http = req.getVersion() + " " 
+    + std::to_string(cgiResult.statusCode) + " "
+    + HttpResponse::statusText(cgiResult.statusCode) + "\r\n";
+    //add headers from pythonfile.
+
+    
+
+    
+  }
+  catch(){
+
+  }
 
   client.setResponseBuffer(cgiResult.rawOutput);
 }

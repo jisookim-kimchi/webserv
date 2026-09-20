@@ -178,7 +178,8 @@ bool HTTP_Request::parseRequestLine(const std::string &buffer, size_t &headerSta
     size_t secondSpace = buffer.find(' ', firstSpace + 1);
     if (secondSpace == std::string::npos)
         return false;
-    uri_ = buffer.substr(firstSpace + 1, secondSpace - firstSpace - 1);
+    size_t uriLen = secondSpace - firstSpace - 1;
+    uri_.assign(buffer, firstSpace + 1, uriLen);
     if (uri_.empty() || uri_[0] != '/')
         return false;
     size_t queryPos = uri_.find('?');
