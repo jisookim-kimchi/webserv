@@ -13,6 +13,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <iostream> // for DEBUG
+
 namespace {
 
 std::vector<std::string> buildEnvironment(const CgiHandler::Request& request) {
@@ -242,12 +244,10 @@ void CgiHandler::spawnChild(const Request& request, int stdinRead, int stdinWrit
     close(stdoutRead);
     close(stdoutWrite);
     closeInheritedFds();
-
     const std::string cwd = request.workingDirectory.empty() ? Utils::dirName(request.scriptPath)
                                                              : request.workingDirectory;
     if (!cwd.empty())
         chdir(cwd.c_str());
-
     auto envStrings = buildEnvironment(request);
     auto envp = toCStringArray(envStrings);
 
@@ -262,6 +262,7 @@ void CgiHandler::spawnChild(const Request& request, int stdinRead, int stdinWrit
         auto argv = toCStringArray(argStrings);
         execve(request.scriptPath.c_str(), argv.data(), envp.data());
     }
+    perror("execve failed");
     _exit(127);
 }
 
