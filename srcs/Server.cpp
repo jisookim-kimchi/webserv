@@ -190,6 +190,7 @@ void Server::handleClientRead(
                 if it's invalid, generate 400 error response and send it to client.
     @param client : client object
     @param epollFd : epoll file descriptor
+    @note : now it hanlde only serverConfigs_[0] so we need to fix this part to handle multiple serverConfigs.
 */
 void Server::processRequest(Client &client, int epollFd) {
   HTTP_Request req;
