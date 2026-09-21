@@ -86,7 +86,7 @@ void parse_test_config_structure() {
     const auto& servers = parser.getServerConfigs();
 
     EXPECT_EQ(servers.size(), 1u);
-    EXPECT_EQ(servers[0].getHost(), std::string("127.0.0.1"));
+    EXPECT_EQ(servers[0].getHost(), std::string("0.0.0.0"));
     EXPECT_EQ(servers[0].getPort().size(), 1u);
     EXPECT_EQ(servers[0].getPort()[0], 8080);
     EXPECT_EQ(servers[0].getServerName()[0], std::string("localhost"));
