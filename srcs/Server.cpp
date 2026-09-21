@@ -270,16 +270,14 @@ const ServerConfig& Server::findServerConfig(const Client& client, const HTTP_Re
 }
 
 /**
-    @brief : if it'scgi request, call this function.
-                create a CgiHandler instance and request's parsing data insert into CgiHandler instance.
-                call CgiHandler::execute() method and get the result.
-                set client's response buffer with the result.
+    @brief : creating cgiHandler instance to pass CgiResponse.
+            get datas from Client and HTTP_Request and insert into CgiHandler::Request.
     @param client : client object
     @param req : HTTP request
     @param loc : LocationConfig object
 */
-void Server::handleCgi(Client &client, const HTTP_Request &req,
-                       const LocationConfig *loc) {
+CgiHandler::Request Server::createCgiRequest(Client &client, const HTTP_Request &req,
+                       const LocationConfig *loc) const {
   CgiHandler::Request cgiReq;
   if (loc) {
     cgiReq.interpreterPath = loc->getCgiPass();
@@ -304,16 +302,28 @@ void Server::handleCgi(Client &client, const HTTP_Request &req,
   cgiReq.serverPort = std::to_string(client.getServerPort());
   const ServerConfig& config = findServerConfig(client, req);
   cgiReq.serverName = config.getServerName().empty() ? "localhost" : config.getServerName()[0];
+  return cgiReq;
+}
 
-  //TODO add HTTP format here!
-  /*
-    HTTP/1.1 200 OK
-    Content-Type: text/html
-    Content-Length: 45
-    Connection: close
-    <html><body><h1>Hello, webserv!</h1></body></html>
-  */
-  try {
+/**
+    @brief: generate HTTP Response, from created CgiRequest class.
+            and then pass it to the Client.
+            also it handle internal server error if occurs return 500. not 400!
+    @example:                                    
+            HTTP/1.1 200 OK
+            Content-Type: text/html
+            Content-Length: 45
+            Connection: close
+            <html><body><h1>Hello, webserv!</h1></body></html>      
+    @param client : client object
+    @param req : HTTP request
+    @param loc : LocationConfig object
+*/
+void Server::handleCgi(Client &client, const HTTP_Request &req, const LocationConfig* loc)
+{
+    const ServerConfig &config = findServerConfig(client, req);
+    CgiHandler::Request cgiReq = createCgiRequest(client, req, loc);
+    try {
     CgiHandler::Result cgiResult = CgiHandler::execute(cgiReq); // check here!
     std::string httpFormat = req.getVersion() + " " 
     + std::to_string(cgiResult.statusCode) + " "
