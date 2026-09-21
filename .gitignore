@@ -1,7 +1,13 @@
 # Build artifacts
 build/
+objs/
+webserv
+*.o
 test_parser
 cgi_demo
+
+# Generated / noisy test outputs
+tests/test_tokenize.txt
 
 # Python
 __pycache__/
