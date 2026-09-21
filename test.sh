@@ -26,6 +26,14 @@ build_cgi() {
     -o build/test_cgi
 }
 
+build_http_request() {
+  echo "[build] test_http_request"
+  "$CXX" "${CXXFLAGS[@]}" \
+    tests/test_HTTP_request.cpp \
+    srcs/HTTP_request.cpp \
+    -o build/test_http_request
+}
+
 run_config() {
   echo "[run]   test_config"
   ./build/test_config
@@ -36,12 +44,19 @@ run_cgi() {
   ./build/test_cgi
 }
 
+run_http_request() {
+  echo "[run]   test_http_request"
+  ./build/test_http_request
+}
+
 case "${MODULE}" in
   all)
     build_config
     build_cgi
+    build_http_request
     run_config
     run_cgi
+    run_http_request
     echo
     echo "All tests passed."
     ;;
@@ -53,8 +68,12 @@ case "${MODULE}" in
     build_cgi
     run_cgi
     ;;
+  http_request|request)
+    build_http_request
+    run_http_request
+    ;;
   *)
-    echo "usage: $0 [all|config|cgi]" >&2
+    echo "usage: $0 [all|config|cgi|http_request]" >&2
     exit 1
     ;;
 esac
