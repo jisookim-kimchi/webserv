@@ -3,6 +3,10 @@ build/
 test_parser
 cgi_demo
 
+# Generated / noisy test outputs
+tests/fixtures/configs/edge/generated_large.config
+tests/test_tokenize.txt
+
 # Python
 __pycache__/
 *.pyc
