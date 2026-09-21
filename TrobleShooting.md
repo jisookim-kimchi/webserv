@@ -30,5 +30,5 @@ so we can use std::move for transferring ownership.
   Content-Length: 50
   ```
   this is not `HTTP Format`
-- Fix : not yet
+- Fix : Wrapped CGI output with standard HTTP/1.1 status line (`HTTP/1.1 200 OK`) and `Content-Length` header to resolve the `HTTP/0.9` error.
   

@@ -63,6 +63,15 @@ std::string dumpServers(const std::vector<ServerConfig>& servers) {
     return out.str();
 }
 
+void test_dump_parser_diff() {
+    ConfigParser parser;
+    parser.parse(projectRoot() + "/configs/Basic.config");
+    
+    std::ofstream outfile(projectRoot() + "/tests/parseServer_parseLocation.txt");
+    outfile << dumpServers(parser.getServerConfigs());
+    outfile.close();
+}
+
 std::string readFile(const std::string& path) {
     std::ifstream in(path);
     expectTrue(static_cast<bool>(in), "cannot open " + path);
@@ -112,6 +121,7 @@ int main() {
     int failed = 0;
     failed += runTest("parse_test_config_structure", parse_test_config_structure);
     failed += runTest("parse_basic_config_snapshot", parse_basic_config_snapshot);
-    std::cout << "-- config: " << (2 - failed) << "/2 passed\n";
+    failed += runTest("test_dump_parser_diff", test_dump_parser_diff);
+    std::cout << "-- config: " << (3 - failed) << "/3 passed\n";
     return failed == 0 ? 0 : 1;
 }
