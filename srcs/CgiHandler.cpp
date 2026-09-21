@@ -13,8 +13,6 @@
 #include <stdexcept>
 #include <vector>
 
-#include <iostream> // for DEBUG
-
 namespace {
 
 std::vector<std::string> buildEnvironment(const CgiHandler::Request& request) {
@@ -262,7 +260,6 @@ void CgiHandler::spawnChild(const Request& request, int stdinRead, int stdinWrit
         auto argv = toCStringArray(argStrings);
         execve(request.scriptPath.c_str(), argv.data(), envp.data());
     }
-    perror("execve failed");
     _exit(127);
 }
 
