@@ -1,6 +1,7 @@
 #include "../includes/HTTP_Request.hpp"
 #include "test_utils.hpp"
 #include <iostream>
+#include <sstream>
 #include <string>
 
 namespace {
@@ -209,6 +210,131 @@ void test_complex_uri_and_query() {
     EXPECT_EQ(req.getHeader("accept"), "text/html,application/xhtml+xml");
 }
 
+void test_large_body() {
+    const std::string payload(256 * 1024, 'A');
+    std::ostringstream oss;
+    oss << "POST /upload HTTP/1.1\r\n"
+        << "Host: localhost\r\n"
+        << "Content-Length: " << payload.size() << "\r\n"
+        << "\r\n"
+        << payload;
+    HTTP_Request req;
+    EXPECT_TRUE(req.parse(oss.str()));
+    EXPECT_EQ(req.getBody().size(), payload.size());
+    EXPECT_EQ(req.getBody()[0], 'A');
+    EXPECT_EQ(req.getBody()[payload.size() - 1], 'A');
+}
+
+void test_many_headers() {
+    std::ostringstream oss;
+    oss << "GET /h HTTP/1.1\r\nHost: localhost\r\n";
+    for (int i = 0; i < 200; ++i)
+        oss << "X-Custom-" << i << ": value-" << i << "\r\n";
+    oss << "\r\n";
+    HTTP_Request req;
+    EXPECT_TRUE(req.parse(oss.str()));
+    EXPECT_EQ(req.getHeader("x-custom-0"), "value-0");
+    EXPECT_EQ(req.getHeader("x-custom-199"), "value-199");
+    EXPECT_EQ(req.getHeaders().size(), 201UL);  // host + 200
+}
+
+void test_empty_header_value() {
+    std::string raw =
+        "GET /x HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "X-Empty:\r\n"
+        "\r\n";
+    HTTP_Request req;
+    EXPECT_TRUE(req.parse(raw));
+    EXPECT_EQ(req.getHeader("x-empty"), "");
+}
+
+void test_crlf_only_after_headers_zero_cl() {
+    std::string raw =
+        "POST /z HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "Content-Length: 0\r\n"
+        "\r\n";
+    HTTP_Request req;
+    EXPECT_TRUE(req.parse(raw));
+    EXPECT_EQ(req.getBody(), "");
+}
+
+void test_bad_percent_encoding() {
+    std::string raw =
+        "GET /bad%zz HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "\r\n";
+    HTTP_Request req;
+    EXPECT_TRUE(!req.parse(raw));
+}
+
+void test_incomplete_percent() {
+    std::string raw =
+        "GET /bad%2 HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "\r\n";
+    HTTP_Request req;
+    EXPECT_TRUE(!req.parse(raw));
+}
+
+void test_path_must_start_with_slash() {
+    std::string raw =
+        "GET index.html HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "\r\n";
+    HTTP_Request req;
+    EXPECT_TRUE(!req.parse(raw));
+}
+
+void test_chunked_incomplete() {
+    std::string raw =
+        "POST /c HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "5\r\n"
+        "Hel";
+    HTTP_Request req;
+    EXPECT_TRUE(!req.parse(raw));
+}
+
+void test_chunked_bad_size() {
+    std::string raw =
+        "POST /c HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "ZZ\r\n"
+        "nope\r\n"
+        "0\r\n"
+        "\r\n";
+    HTTP_Request req;
+    EXPECT_TRUE(!req.parse(raw));
+}
+
+void test_tab_folded_spacing_in_headers() {
+    std::string raw =
+        "GET /t HTTP/1.1\r\n"
+        "Host:\t\tlocalhost\t\r\n"
+        "X-Data:    spaced   value\r\n"
+        "\r\n";
+    HTTP_Request req;
+    EXPECT_TRUE(req.parse(raw));
+    EXPECT_EQ(req.getHeader("host"), "localhost\t");
+    EXPECT_EQ(req.getHeader("x-data"), "spaced   value");
+}
+
+void test_long_query_string() {
+    std::string q(8000, 'q');
+    std::string raw =
+        "GET /search?" + q + " HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "\r\n";
+    HTTP_Request req;
+    EXPECT_TRUE(req.parse(raw));
+    EXPECT_EQ(req.getQueryString().size(), 8000UL);
+}
 
 } // namespace
 
@@ -230,6 +356,17 @@ int main() {
     failed += runTest("test_len_and_chunked", &test_len_and_chunked);
     failed += runTest("test_complex_chunked", &test_complex_chunked);
     failed += runTest("test_complex_uri_and_query", &test_complex_uri_and_query);
+    failed += runTest("test_large_body", &test_large_body);
+    failed += runTest("test_many_headers", &test_many_headers);
+    failed += runTest("test_empty_header_value", &test_empty_header_value);
+    failed += runTest("test_crlf_only_after_headers_zero_cl", &test_crlf_only_after_headers_zero_cl);
+    failed += runTest("test_bad_percent_encoding", &test_bad_percent_encoding);
+    failed += runTest("test_incomplete_percent", &test_incomplete_percent);
+    failed += runTest("test_path_must_start_with_slash", &test_path_must_start_with_slash);
+    failed += runTest("test_chunked_incomplete", &test_chunked_incomplete);
+    failed += runTest("test_chunked_bad_size", &test_chunked_bad_size);
+    failed += runTest("test_tab_folded_spacing_in_headers", &test_tab_folded_spacing_in_headers);
+    failed += runTest("test_long_query_string", &test_long_query_string);
     if (failed == 0) {
         std::cout << "\n All HTTP_Request tests passed!\n";
     } else {
