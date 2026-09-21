@@ -306,22 +306,48 @@ void Server::handleCgi(Client &client, const HTTP_Request &req,
   cgiReq.serverName = config.getServerName().empty() ? "localhost" : config.getServerName()[0];
 
   //TODO add HTTP format here!
+  /*
+    HTTP/1.1 200 OK
+    Content-Type: text/html
+    Content-Length: 45
+    Connection: close
+    <html><body><h1>Hello, webserv!</h1></body></html>
+  */
   try {
     CgiHandler::Result cgiResult = CgiHandler::execute(cgiReq); // check here!
-    std::string http = req.getVersion() + " " 
+    std::string httpFormat = req.getVersion() + " " 
     + std::to_string(cgiResult.statusCode) + " "
     + HttpResponse::statusText(cgiResult.statusCode) + "\r\n";
-    //add headers from pythonfile.
-
-    
-
-    
+    std::cout << httpFormat << std::endl;
+    //add headers from pyton-file.
+    bool hasCL = false;
+    for (const auto &h : cgiResult.headers)
+    {
+        std::cout << "Header: [" << h.first << "] = [" << h.second << "]" << std::endl;
+        if (Utils::toLower(h.first) != "status")
+        {
+            httpFormat += h.first + ": " + h.second + "\r\n";
+        }
+        if (Utils::toLower(h.first) == "content-length")
+            hasCL = true;
+    }
+    if (!hasCL)
+    {
+        httpFormat += "Content-Length: " +
+        std::to_string(cgiResult.body.size()) + "\r\n";
+    }
+    httpFormat += "Connection: close\r\n\r\n";
+    httpFormat += cgiResult.body;
+    client.setResponseBuffer(httpFormat); 
   }
-  catch(){
-
+  catch(const std::exception &e){
+    std::cerr << "CGI Error!" << e.what() << "\n";
+    HttpResponse::RequestView errView;
+    errView.errorStatus = 500;
+    HttpResponse res;
+    res.buildForPath(errView, config);
+    client.setResponseBuffer(res.getRaw());
   }
-
-  client.setResponseBuffer(cgiResult.rawOutput);
 }
 
 /**
