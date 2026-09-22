@@ -31,4 +31,25 @@ so we can use std::move for transferring ownership.
   ```
   this is not `HTTP Format`
 - Fix : Wrapped CGI output with standard HTTP/1.1 status line (`HTTP/1.1 200 OK`) and `Content-Length` header to resolve the `HTTP/0.9` error.
+
+5. Empty response after request parse
+- Issue : after `HTTP_Request::parse` succeeded, `setResponseBuffer` was still commented / TODO, but the loop already switched the client to `EPOLLOUT`.
+  `curl` got an empty body (or nothing useful) even though the server accepted the connection.
+
+6. Incomplete body treated as a finished request
+- Issue : as soon as `\r\n\r\n` appeared, `processRequest()` ran.
+  For `Content-Length` / chunked POST, the body was often still incomplete → parse failed as 400, or the body was truncated.
+
+7. Partial `send` dropped the rest of the response
+- Issue : `handleClientWrite` called `send()` once and then closed the client.
+  On a short write (common with non-blocking sockets / large CGI or file bodies), the client only received the first chunk.
+  `Client::offset_` existed but was unused.
+
+8. CGI script path did not match static file mapping
+- Issue : CGI built the script path as `cwd + "/" + root + url` (and hardcoded `"www"` when location root was empty).
+  Extension locations like `.py` often have no `root`, so the path became wrong vs `HttpResponse::mapUrlToFs` / longest prefix location → CGI 500 / file not found.
+
+9. Build artifacts committed into git
+- Issue : `objs/*.o` and the `webserv` binary were tracked in the branch.
+  Polluted the PR diff, bloated the repo, and caused noisy merge / CI noise.
   
