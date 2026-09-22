@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <ctime>
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -140,6 +141,8 @@ std::string HttpResponse::statusText(int code) {
             return "Internal Server Error";
         case 501:
             return "Not Implemented";
+        case 504:
+            return "Gateway Timeout";
         default:
             return "Error";
     }
@@ -207,8 +210,33 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
     }
 
     if (request.method == "POST") {
-        // Upload handling belongs with Client/Server once wired; not here.
-        setError(501, server, &location);
+        std::string dest = fsPath;
+        if (isDir(fsPath) || (!path.empty() && path.back() == '/')) {
+            if (!isDir(fsPath)) {
+                setError(404, server, &location);
+                return;
+            }
+            dest = joinPath(fsPath, "upload_" + std::to_string(static_cast<long long>(::time(nullptr))));
+        }
+        {
+            std::ofstream out(dest.c_str(), std::ios::binary | std::ios::trunc);
+            if (!out) {
+                setError(500, server, &location);
+                return;
+            }
+            out.write(request.body.data(), static_cast<std::streamsize>(request.body.size()));
+            if (!out) {
+                setError(500, server, &location);
+                return;
+            }
+        }
+        body_ = "Created\n";
+        statusCode_ = 201;
+        headers_.clear();
+        headers_["Content-Type"] = "text/plain";
+        headers_["Content-Length"] = std::to_string(body_.size());
+        headers_["Connection"] = "close";
+        finalize();
         return;
     }
 
