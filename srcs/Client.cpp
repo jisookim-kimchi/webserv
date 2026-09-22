@@ -1,4 +1,5 @@
 #include "../includes/Client.hpp"
+
 #include <unistd.h>
 
 Client::Client(int fd, const struct sockaddr_in& addr, int serverPort)
@@ -6,10 +7,10 @@ Client::Client(int fd, const struct sockaddr_in& addr, int serverPort)
       addr_(addr),
       serverPort_(serverPort),
       state_(ClientState::READING_REQUEST),
-      lastActiveTime_(std::time(nullptr)) {
-}
+      lastActiveTime_(std::time(nullptr)) {}
 
 Client::~Client() {
+    cgi_.reset();
     if (fd_ != -1) {
         close(fd_);
         fd_ = -1;
