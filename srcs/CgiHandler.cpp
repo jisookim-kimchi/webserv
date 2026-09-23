@@ -244,21 +244,33 @@ void CgiHandler::spawnChild(const Request& request, int stdinRead, int stdinWrit
     closeInheritedFds();
     const std::string cwd = request.workingDirectory.empty() ? Utils::dirName(request.scriptPath)
                                                              : request.workingDirectory;
-    if (!cwd.empty())
-        chdir(cwd.c_str());
+    // After chdir(cwd), a relative scriptPath that still includes cwd would double
+    // (e.g. cwd=www/cgi-bin + script=www/cgi-bin/hello.py). Pass a path relative to cwd
+    // when possible; keep absolute paths as-is.
+    std::string scriptArg = request.scriptPath;
+    if (!cwd.empty()) {
+        if (chdir(cwd.c_str()) == 0 && scriptArg.compare(0, cwd.size(), cwd) == 0) {
+            scriptArg = scriptArg.substr(cwd.size());
+            while (!scriptArg.empty() && scriptArg[0] == '/')
+                scriptArg.erase(0, 1);
+        }
+    }
+    if (scriptArg.empty())
+        scriptArg = request.scriptPath;
+
     auto envStrings = buildEnvironment(request);
     auto envp = toCStringArray(envStrings);
 
     std::vector<std::string> argStrings;
     if (!request.interpreterPath.empty()) {
         argStrings.push_back(request.interpreterPath);
-        argStrings.push_back(request.scriptPath);
+        argStrings.push_back(scriptArg);
         auto argv = toCStringArray(argStrings);
         execve(request.interpreterPath.c_str(), argv.data(), envp.data());
     } else {
-        argStrings.push_back(request.scriptPath);
+        argStrings.push_back(scriptArg);
         auto argv = toCStringArray(argStrings);
-        execve(request.scriptPath.c_str(), argv.data(), envp.data());
+        execve(scriptArg.c_str(), argv.data(), envp.data());
     }
     _exit(127);
 }
