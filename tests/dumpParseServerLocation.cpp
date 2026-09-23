@@ -2,24 +2,20 @@
 #include <fstream>
 #include <iostream>
 
-int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cerr << "error : need to input config file\n";
-        return 1;
-    }
+void dumpParseServerLocation(const std::string& configPath, const std::string& outputPath) {
     ConfigParser parser;
-    parser.parse(argv[1]);
-
+    parser.parse(configPath);
     const std::vector<ServerConfig>& Configs = parser.getServerConfigs();
-    std::ofstream outfile("tests/parseServer_parseLocation.txt");
-
+    std::ofstream outfile(outputPath);
+    if (!outfile.is_open()) {
+        std::cerr << "error : cannot open output file " << outputPath << "\n";
+        return;
+    }
     for (size_t i = 0; i < Configs.size(); i++) {
         if (0 < i)
             outfile << "\n";
-        outfile << "server "
-                << "[" << i << "]\n";
+        outfile << "server [" << i << "]\n";
         outfile << "host    " << Configs[i].getHost() << '\n';
-
         const std::vector<uint16_t>& ports = Configs[i].getPort();
         for (size_t j = 0; j < ports.size(); j++) {
             outfile << "listen    " << ports[j] << '\n';
@@ -47,25 +43,24 @@ int main(int argc, char** argv) {
             if (!locs[k].getAllowMethods().empty()) {
                 outfile << "allow_methods    ";
                 const std::vector<std::string>& methods = locs[k].getAllowMethods();
-                for (size_t i = 0; i < methods.size(); ++i) {
-                    if (i != 0)
+                for (size_t m = 0; m < methods.size(); ++m) {
+                    if (m != 0)
                         outfile << ' ';
-                    outfile << methods[i];
+                    outfile << methods[m];
                 }
                 outfile << '\n';
             }
             if (!locs[k].getIndex().empty()) {
                 outfile << "index    ";
                 const std::vector<std::string>& indexes = locs[k].getIndex();
-                for (size_t i = 0; i < indexes.size(); ++i) {
-                    if (i != 0)
+                for (size_t idx = 0; idx < indexes.size(); ++idx) {
+                    if (idx != 0)
                         outfile << ' ';
-                    outfile << indexes[i];
+                    outfile << indexes[idx];
                 }
                 outfile << '\n';
             }
         }
     }
     outfile.close();
-    return 0;
 }

@@ -18,13 +18,13 @@ jobs:
       - name: Set up C++ Environment
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential
 
-      - name: Build Project & Tests
-        run: |
-          c++ -Wall -Wextra -Werror -g -std=c++17 tests/main.cpp srcs/*.cpp \
-            -Iincludes -o test_parser
+      - name: Build webserv
+        run: make
 
       - name: Run parser test
-        run: ./test_parser configs/Basic.config
+        run: |
+          chmod +x test.sh
+          ./test.sh all
 
       - name: Verify Generated Parser Output
         run: git diff --exit-code -- tests/parseServer_parseLocation.txt

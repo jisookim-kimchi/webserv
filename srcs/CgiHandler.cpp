@@ -242,12 +242,10 @@ void CgiHandler::spawnChild(const Request& request, int stdinRead, int stdinWrit
     close(stdoutRead);
     close(stdoutWrite);
     closeInheritedFds();
-
     const std::string cwd = request.workingDirectory.empty() ? Utils::dirName(request.scriptPath)
                                                              : request.workingDirectory;
     if (!cwd.empty())
         chdir(cwd.c_str());
-
     auto envStrings = buildEnvironment(request);
     auto envp = toCStringArray(envStrings);
 

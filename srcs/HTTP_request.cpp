@@ -178,7 +178,8 @@ bool HTTP_Request::parseRequestLine(const std::string &buffer, size_t &headerSta
     size_t secondSpace = buffer.find(' ', firstSpace + 1);
     if (secondSpace == std::string::npos)
         return false;
-    uri_ = buffer.substr(firstSpace + 1, secondSpace - firstSpace - 1);
+    size_t uriLen = secondSpace - firstSpace - 1;
+    uri_.assign(buffer, firstSpace + 1, uriLen);
     if (uri_.empty() || uri_[0] != '/')
         return false;
     size_t queryPos = uri_.find('?');
@@ -262,10 +263,12 @@ bool HTTP_Request::parseBody(const std::string &buffer, size_t headerEnd)
     if (hasContentLength && isChunked)
         return false;
 
+    const size_t bodyStart = headerEnd + 4;
+
     if (isChunked)
     {
         body_.clear();
-        size_t pos = headerEnd + 4;
+        size_t pos = bodyStart;
         while (pos < buffer.size())
         {
             size_t rn = buffer.find("\r\n", pos);
@@ -275,18 +278,21 @@ bool HTTP_Request::parseBody(const std::string &buffer, size_t headerEnd)
             if (!hexStrRangeToSize(buffer, pos, rn - pos, chunkSize))
                 return false;
             if (chunkSize == 0)
-                break;
+            {
+                // Need final CRLF after the 0-size chunk line (`0\r\n\r\n`).
+                if (rn + 4 > buffer.size())
+                    return false;
+                return true;
+            }
             size_t dataStart = rn + 2;
             if (dataStart + chunkSize + 2 > buffer.size())
                 return false;
             body_.append(buffer, dataStart, chunkSize);
             pos = dataStart + chunkSize + 2;
         }
+        return false;
     }
-    else
-    {
-        body_.assign(buffer, headerEnd + 4, buffer.size() - (headerEnd + 4));
-    }
+
     if (hasContentLength)
     {
         const std::string& realLenStr = conLenIt->second;
@@ -299,9 +305,15 @@ bool HTTP_Request::parseBody(const std::string &buffer, size_t headerEnd)
                 return false;
             expectedLen = (expectedLen << 3) + (expectedLen << 1) + (realLenStr[i] - '0');
         }
-        if (body_.size() != expectedLen)
+        const size_t available = buffer.size() - bodyStart;
+        if (available < expectedLen)
             return false;
+        body_.assign(buffer, bodyStart, expectedLen);
+        return true;
     }
+
+    // No Content-Length and not chunked: empty body (do not swallow trailing bytes).
+    body_.clear();
     return true;
 }
 

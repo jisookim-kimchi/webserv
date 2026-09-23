@@ -54,11 +54,13 @@ class HttpResponse {
         return needsCgi_;
     }
 
+    // Shared with Server CGI wiring (same rules as static file mapping).
+    std::string mapUrlToFs(const LocationConfig& loc, const std::string& urlPath) const;
+
     static std::string statusText(int code);
 
    private:
     bool methodAllowed(const std::string& method, const LocationConfig& loc) const;
-    std::string mapUrlToFs(const LocationConfig& loc, const std::string& urlPath) const;
 
     void setError(int code, const ServerConfig& server, const LocationConfig* loc);
     void setRedirect(int code, const std::string& target);

@@ -24,6 +24,9 @@ class Client {
 
     ClientState getState() const;
     void setState(ClientState state);
+    size_t getOffset() const { return offset_; }
+    void addOffset(size_t bytes) { offset_ += bytes; }
+    void resetOffset() { offset_ = 0; }
 
     time_t getLastActiveTime() const;
     void updateLastActiveTime();
@@ -42,7 +45,7 @@ class Client {
    private:
     const Client& operator=(const Client& other) = delete;
     Client(const Client& other) = delete;
-
+    size_t offset_ = 0;
     int fd_;
     struct sockaddr_in addr_;
     int serverPort_;

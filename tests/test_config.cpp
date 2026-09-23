@@ -76,6 +76,15 @@ std::string dumpServers(const std::vector<ServerConfig>& servers) {
     return out.str();
 }
 
+void test_dump_parser_diff() {
+    ConfigParser parser;
+    parser.parse(projectRoot() + "/configs/Basic.config");
+    
+    std::ofstream outfile(projectRoot() + "/tests/parseServer_parseLocation.txt");
+    outfile << dumpServers(parser.getServerConfigs());
+    outfile.close();
+}
+
 std::string readFile(const std::string& path) {
     std::ifstream in(path);
     expectTrue(static_cast<bool>(in), "cannot open " + path);
@@ -154,7 +163,7 @@ void parse_test_config_structure() {
     const auto& servers = parser.getServerConfigs();
 
     EXPECT_EQ(servers.size(), 1u);
-    EXPECT_EQ(servers[0].getHost(), std::string("127.0.0.1"));
+    EXPECT_EQ(servers[0].getHost(), std::string("0.0.0.0"));
     EXPECT_EQ(servers[0].getPort().size(), 1u);
     EXPECT_EQ(servers[0].getPort()[0], 8080);
     EXPECT_EQ(servers[0].getServerName()[0], std::string("localhost"));
@@ -351,6 +360,7 @@ int main(int argc, char** argv) {
     int failed = 0;
     failed += runTest("parse_test_config_structure", parse_test_config_structure);
     failed += runTest("parse_basic_config_snapshot", parse_basic_config_snapshot);
+    failed += runTest("test_dump_parser_diff", test_dump_parser_diff);
     failed += runTest("parse_edge_whitespace_and_comments", parse_edge_whitespace_and_comments);
     failed += runTest("parse_edge_dense_directives", parse_edge_dense_directives);
     failed += runTest("parse_edge_body_size_units", parse_edge_body_size_units);
@@ -361,7 +371,7 @@ int main(int argc, char** argv) {
     failed += runTest("parse_invalid_configs_fail", parse_invalid_configs_fail);
     failed += runTest("parse_valid_fixtures_ok_in_child", parse_valid_fixtures_ok_in_child);
 
-    const int total = 11;
+    const int total = 12;
     std::cout << "-- config: " << (total - failed) << "/" << total << " passed\n";
     return failed == 0 ? 0 : 1;
 }

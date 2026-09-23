@@ -71,6 +71,7 @@ std::string& Client::getResponseBuffer() {
 
 void Client::setResponseBuffer(const std::string& response) {
     responseBuffer_ = response;
+    offset_ = 0;
     updateLastActiveTime();
 }
 
@@ -81,4 +82,5 @@ void Client::appendResponseBuffer(const char* data, size_t size) {
 
 void Client::clearResponseBuffer() {
     responseBuffer_.clear();
+    offset_ = 0;
 }

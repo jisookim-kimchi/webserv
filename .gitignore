@@ -1,5 +1,8 @@
 # Build artifacts
 build/
+objs/
+webserv
+*.o
 test_parser
 cgi_demo
 
