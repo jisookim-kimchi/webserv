@@ -48,8 +48,6 @@ void ListenSocket::bind(int port, const std::string& host) {
     addr_.sin_port = htons(port_);
     if (::bind(fd_, (struct sockaddr*)&addr_, sizeof(addr_)) < 0)
         throw std::runtime_error("Error : ListenSocket::bind()");
-    else
-        std::cout << "ListenSocket bind success : " << port_ << '\n';
 }
 
 /*
@@ -61,15 +59,12 @@ void ListenSocket::bind(int port, const std::string& host) {
 void ListenSocket::listen() {
     if (::listen(fd_, SOMAXCONN) < 0)
         throw std::runtime_error("Error : ListenSocket::listen()");
-    else
-        std::cout << "ListenSocket listen success : " << port_ << '\n';
 }
 
 /*
     @brief accept Connection from client
     @return ClientSocket
     @throws std::runtime_error if accept fails
-    @TODO research Errno Cases...
 */
 int ListenSocket::accept(struct sockaddr_in& clientAddr) {
     socklen_t clientAddrLen = sizeof(clientAddr);
@@ -78,19 +73,16 @@ int ListenSocket::accept(struct sockaddr_in& clientAddr) {
         if (errno == EWOULDBLOCK || errno == EAGAIN)
             return -1;
         throw std::runtime_error("Error : ListenSocket::accept()");
-    } else
-        std::cout << "ListenSocket::accept success : " << client_socket_fd << '\n';
+    }
     return client_socket_fd;
 }
 
 /*
     @brief close socket
-    @throws std::runtime_error if close fails
 */
 void ListenSocket::close() {
     if (fd_ != -1) {
         ::close(fd_);
         fd_ = -1;
-        std::cout << "ListenSocket close success! (Port : " << port_ << ")\n";
     }
 }
