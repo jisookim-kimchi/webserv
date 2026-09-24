@@ -4,6 +4,7 @@
 #include "ListenSocket.hpp"
 #include "ServerConfig.hpp"
 
+#include <ctime>
 #include <map>
 #include <memory>
 #include <sys/epoll.h>
@@ -44,6 +45,7 @@ class Server {
     void syncCgiEpoll(Client& client, int epollFd);
     void finishCgi(Client& client, int epollFd);
     void checkCgiTimeouts(int epollFd);
+    void checkIdleClients(int epollFd);
 
     const ServerConfig& findServerConfig(const Client& client, const HTTP_Request& req) const;
     CgiHandler::Request createCgiRequest(Client& client, const HTTP_Request& req,
