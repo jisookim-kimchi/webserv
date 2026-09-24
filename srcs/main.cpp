@@ -4,13 +4,13 @@
 
 int main(int argc, char** argv)
 {
-    std::string configPath = "configs/test.config";
+    std::string configPath;
     if (argc == 2)
         configPath = argv[1];
-    else if (argc > 2)
+    else
     {
-        std::cerr << "too many arguments\n";
-        return 1;
+        std::cerr << "usage : ./webserv [config file]\n";
+        exit(1);
     }
     try
     {
@@ -21,7 +21,7 @@ int main(int argc, char** argv)
     } catch (const std::exception& e)
     {
         std::cerr << "Error: " << e.what() << "\n";
-        return 1;
+        exit(1);
     }
 
     return 0;
