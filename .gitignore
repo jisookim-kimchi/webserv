@@ -9,6 +9,8 @@ cgi_demo
 # Generated / noisy test outputs
 tests/fixtures/configs/edge/generated_large.config
 tests/test_tokenize.txt
+tests/fixtures/www/upload/upload_*
+www/upload/upload_*
 
 # Python
 __pycache__/

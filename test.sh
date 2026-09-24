@@ -34,6 +34,14 @@ build_http_request() {
     -o build/test_http_request
 }
 
+build_http_response() {
+  echo "[build] test_http_response"
+  "$CXX" "${CXXFLAGS[@]}" \
+    tests/test_http_response.cpp \
+    srcs/HttpResponse.cpp srcs/LocationConfig.cpp srcs/ServerConfig.cpp \
+    -o build/test_http_response
+}
+
 run_config() {
   echo "[run]   test_config"
   ./build/test_config
@@ -49,14 +57,21 @@ run_http_request() {
   ./build/test_http_request
 }
 
+run_http_response() {
+  echo "[run]   test_http_response"
+  ./build/test_http_response
+}
+
 case "${MODULE}" in
   all)
     build_config
     build_cgi
     build_http_request
+    build_http_response
     run_config
     run_cgi
     run_http_request
+    run_http_response
     echo
     echo "All tests passed."
     ;;
@@ -72,8 +87,12 @@ case "${MODULE}" in
     build_http_request
     run_http_request
     ;;
+  http_response|response)
+    build_http_response
+    run_http_response
+    ;;
   *)
-    echo "usage: $0 [all|config|cgi|http_request]" >&2
+    echo "usage: $0 [all|config|cgi|http_request|http_response]" >&2
     exit 1
     ;;
 esac

@@ -1,6 +1,5 @@
 #include "../includes/Server.hpp"
 
-#include "../includes/CgiHandler.hpp"
 #include "../includes/HTTP_Request.hpp"
 #include "../includes/HttpResponse.hpp"
 #include "../includes/Utils.hpp"
@@ -10,6 +9,7 @@
 #include <cerrno>
 #include <fcntl.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <stdexcept>
 #include <string>
 #include <sys/epoll.h>
@@ -18,6 +18,7 @@
 
 constexpr int MAX_EVENTS = 256;
 constexpr size_t BUF_SIZE = 65536;
+constexpr int CGI_POLL_TIMEOUT_MS = 200;
 
 namespace {
 
@@ -82,7 +83,6 @@ bool parseHexSize(const std::string& s, size_t& out) {
     return true;
 }
 
-// true when headers+body are fully buffered (or headers-only with no body framing).
 bool isRequestComplete(const std::string& buf) {
     const size_t headerEnd = buf.find("\r\n\r\n");
     if (headerEnd == std::string::npos)
@@ -95,7 +95,7 @@ bool isRequestComplete(const std::string& buf) {
     const bool chunked = (te == "chunked");
 
     if (!cl.empty() && chunked)
-        return true;  // let parse reject as bad request
+        return true;
 
     if (chunked) {
         size_t pos = bodyStart;
@@ -105,7 +105,7 @@ bool isRequestComplete(const std::string& buf) {
                 return false;
             size_t chunkSize = 0;
             if (!parseHexSize(buf.substr(pos, rn - pos), chunkSize))
-                return true;  // malformed → process and 400
+                return true;
             if (chunkSize == 0)
                 return rn + 4 <= buf.size();
             size_t dataStart = rn + 2;
@@ -119,7 +119,7 @@ bool isRequestComplete(const std::string& buf) {
     if (!cl.empty()) {
         size_t expected = 0;
         if (!parseSizeDecimal(cl, expected))
-            return true;  // malformed → process and 400
+            return true;
         return buf.size() >= bodyStart + expected;
     }
 
@@ -150,6 +150,33 @@ std::string resolveScriptPath(const HttpResponse& mapper, const ServerConfig& se
     if (best == nullptr)
         return "";
     return mapper.mapUrlToFs(*best, urlPath);
+}
+
+uint32_t pollToEpoll(short pevents) {
+    uint32_t events = 0;
+    if (pevents & POLLIN)
+        events |= EPOLLIN;
+    if (pevents & POLLOUT)
+        events |= EPOLLOUT;
+    return events;
+}
+
+std::string formatCgiHttp(const CgiHandler::Result& cgiResult) {
+    std::string out = "HTTP/1.1 " + std::to_string(cgiResult.statusCode) + " " +
+                      HttpResponse::statusText(cgiResult.statusCode) + "\r\n";
+    bool hasCL = false;
+    for (const auto& h : cgiResult.headers) {
+        if (Utils::toLower(h.first) == "status")
+            continue;
+        out += h.first + ": " + h.second + "\r\n";
+        if (Utils::toLower(h.first) == "content-length")
+            hasCL = true;
+    }
+    if (!hasCL)
+        out += "Content-Length: " + std::to_string(cgiResult.body.size()) + "\r\n";
+    out += "Connection: close\r\n\r\n";
+    out += cgiResult.body;
+    return out;
 }
 
 }  // namespace
@@ -183,18 +210,24 @@ Server::Server(const std::vector<ServerConfig>& serverConfigs) : serverConfigs_(
 
 bool Server::isListenSocket(int fd) {
     for (const auto& listenSocket : listenSockets_) {
-        if (listenSocket->getFd() == fd) {
+        if (listenSocket->getFd() == fd)
             return true;
-        }
+    }
+    return false;
+}
+
+bool Server::hasActiveCgi() const {
+    for (const auto& entry : clients_) {
+        if (entry.second->getState() == ClientState::CGI_RUNNING && entry.second->cgi() != nullptr)
+            return true;
     }
     return false;
 }
 
 void Server::run() {
     int epollFd = epoll_create(1);
-    if (epollFd == -1) {
+    if (epollFd == -1)
         throw std::runtime_error("epoll create failed");
-    }
 
     for (const auto& listenSocket : listenSockets_) {
         int fd = listenSocket->getFd();
@@ -209,11 +242,11 @@ void Server::run() {
 
     struct epoll_event events[MAX_EVENTS]{};
     while (true) {
-        int eventCount = epoll_wait(epollFd, events, MAX_EVENTS, -1);
+        const int timeout = hasActiveCgi() ? CGI_POLL_TIMEOUT_MS : -1;
+        int eventCount = epoll_wait(epollFd, events, MAX_EVENTS, timeout);
         if (eventCount == -1) {
-            if (errno == EINTR) {
+            if (errno == EINTR)
                 continue;
-            }
             close(epollFd);
             throw std::runtime_error("epoll wait failed");
         }
@@ -223,18 +256,30 @@ void Server::run() {
 
             if (isListenSocket(eventFd)) {
                 handleNewConnection(eventFd, epollFd);
-            } else {
-                auto it = clients_.find(eventFd);
-                if (it == clients_.end())
-                    continue;
-
-                if (events[i].events & EPOLLIN) {
-                    handleClientRead(eventFd, epollFd, it);
-                } else if (events[i].events & EPOLLOUT) {
-                    handleClientWrite(eventFd, epollFd, it);
-                }
+                continue;
             }
+
+            auto cgiIt = cgiPipeToClient_.find(eventFd);
+            if (cgiIt != cgiPipeToClient_.end()) {
+                handleCgiPipeEvent(eventFd, events[i].events, epollFd);
+                continue;
+            }
+
+            auto it = clients_.find(eventFd);
+            if (it == clients_.end())
+                continue;
+
+            if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
+                closeClient(it, epollFd);
+                continue;
+            }
+            if (events[i].events & EPOLLIN)
+                handleClientRead(eventFd, epollFd, it);
+            else if (events[i].events & EPOLLOUT)
+                handleClientWrite(eventFd, epollFd, it);
         }
+
+        checkCgiTimeouts(epollFd);
     }
 }
 
@@ -270,17 +315,45 @@ void Server::handleNewConnection(int listenFd, int epollFd) {
     epoll_ctl(epollFd, EPOLL_CTL_ADD, clientFd, &clientEvent);
 }
 
+void Server::closeClient(std::map<int, std::unique_ptr<Client>>::iterator it, int epollFd) {
+    Client& client = *(it->second);
+    // Drop any CGI pipe watches for this client.
+    for (auto pit = cgiPipeToClient_.begin(); pit != cgiPipeToClient_.end();) {
+        if (pit->second == client.getFd()) {
+            epoll_ctl(epollFd, EPOLL_CTL_DEL, pit->first, nullptr);
+            pit = cgiPipeToClient_.erase(pit);
+        } else {
+            ++pit;
+        }
+    }
+    epoll_ctl(epollFd, EPOLL_CTL_DEL, client.getFd(), nullptr);
+    clients_.erase(it);
+}
+
+void Server::armClientWrite(Client& client, int epollFd) {
+    client.setState(ClientState::WRITING_RESPONSE);
+    struct epoll_event ev {};
+    ev.events = EPOLLOUT;
+    ev.data.fd = client.getFd();
+    epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
+}
+
 void Server::handleClientRead(int clientFd, int epollFd,
                               std::map<int, std::unique_ptr<Client>>::iterator it) {
     Client& client = *(it->second);
+    if (client.getState() == ClientState::WRITING_RESPONSE)
+        return;
+
     char buf[BUF_SIZE];
     ssize_t ret = read(clientFd, buf, BUF_SIZE);
-
     if (ret <= 0) {
-        epoll_ctl(epollFd, EPOLL_CTL_DEL, clientFd, nullptr);
-        clients_.erase(it);
+        closeClient(it, epollFd);
         return;
     }
+
+    // Ignore extra client input while CGI is in flight.
+    if (client.getState() == ClientState::CGI_RUNNING)
+        return;
 
     client.appendRequestBuffer(buf, static_cast<size_t>(ret));
     if (!isRequestComplete(client.getRequestBuffer()))
@@ -303,10 +376,10 @@ void Server::processRequest(Client& client, int epollFd) {
 
         if (res.needsCgi()) {
             const LocationConfig* loc = LocationMatch::match(req.getPath(), config);
-            handleCgi(client, req, loc);
-        } else {
-            client.setResponseBuffer(res.getRaw());
+            handleCgi(client, req, loc, epollFd);
+            return;
         }
+        client.setResponseBuffer(res.getRaw());
     } else {
         HttpResponse::RequestView view;
         view.errorStatus = 400;
@@ -315,11 +388,7 @@ void Server::processRequest(Client& client, int epollFd) {
         client.setResponseBuffer(res.getRaw());
     }
 
-    client.setState(ClientState::WRITING_RESPONSE);
-    struct epoll_event ev {};
-    ev.events = EPOLLOUT;
-    ev.data.fd = client.getFd();
-    epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
+    armClientWrite(client, epollFd);
 }
 
 const ServerConfig& Server::findServerConfig(const Client& client, const HTTP_Request& req) const {
@@ -379,32 +448,126 @@ CgiHandler::Request Server::createCgiRequest(Client& client, const HTTP_Request&
     return cgiReq;
 }
 
-void Server::handleCgi(Client& client, const HTTP_Request& req, const LocationConfig* loc) {
-    const ServerConfig& config = findServerConfig(client, req);
-    CgiHandler::Request cgiReq = createCgiRequest(client, req, loc);
-    try {
-        CgiHandler::Result cgiResult = CgiHandler::execute(cgiReq);
-        std::string httpFormat = req.getVersion() + " " + std::to_string(cgiResult.statusCode) +
-                                 " " + HttpResponse::statusText(cgiResult.statusCode) + "\r\n";
-        bool hasCL = false;
-        for (const auto& h : cgiResult.headers) {
-            if (Utils::toLower(h.first) == "status")
-                continue;
-            httpFormat += h.first + ": " + h.second + "\r\n";
-            if (Utils::toLower(h.first) == "content-length")
-                hasCL = true;
+// Clear this client's pipe fds from epoll, then re-add whatever CgiHandler still wants.
+void Server::syncCgiEpoll(Client& client, int epollFd) {
+    const int clientFd = client.getFd();
+    for (auto it = cgiPipeToClient_.begin(); it != cgiPipeToClient_.end();) {
+        if (it->second == clientFd) {
+            epoll_ctl(epollFd, EPOLL_CTL_DEL, it->first, nullptr);
+            it = cgiPipeToClient_.erase(it);
+        } else {
+            ++it;
         }
-        if (!hasCL)
-            httpFormat += "Content-Length: " + std::to_string(cgiResult.body.size()) + "\r\n";
-        httpFormat += "Connection: close\r\n\r\n";
-        httpFormat += cgiResult.body;
-        client.setResponseBuffer(httpFormat);
-    } catch (const std::exception&) {
-        HttpResponse::RequestView errView;
-        errView.errorStatus = 500;
+    }
+    if (client.cgi() == nullptr)
+        return;
+
+    CgiHandler& cgi = *client.cgi();
+    auto addPipe = [&](int fd, short want) {
+        if (fd < 0 || want == 0)
+            return;
+        struct epoll_event ev {};
+        ev.events = pollToEpoll(want);
+        ev.data.fd = fd;
+        cgiPipeToClient_[fd] = clientFd;
+        epoll_ctl(epollFd, EPOLL_CTL_ADD, fd, &ev);
+    };
+    addPipe(cgi.stdinFd(), cgi.stdinEvents());
+    addPipe(cgi.stdoutFd(), cgi.stdoutEvents());
+}
+
+void Server::finishCgi(Client& client, int epollFd) {
+    // Remove pipe watches first (fds may already be closed by CgiHandler).
+    for (auto it = cgiPipeToClient_.begin(); it != cgiPipeToClient_.end();) {
+        if (it->second == client.getFd()) {
+            epoll_ctl(epollFd, EPOLL_CTL_DEL, it->first, nullptr);
+            it = cgiPipeToClient_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    int err = 500;
+    if (client.cgi() != nullptr) {
+        const CgiHandler::State st = client.cgi()->state();
+        if (st == CgiHandler::State::Done) {
+            client.setResponseBuffer(formatCgiHttp(client.cgi()->result()));
+            err = 0;
+        } else if (st == CgiHandler::State::TimedOut) {
+            err = 504;
+        }
+    }
+    if (err != 0) {
+        HttpResponse::RequestView view;
+        view.errorStatus = err;
         HttpResponse res;
-        res.buildForPath(errView, config);
+        res.buildForPath(view, serverConfigs_[0]);
         client.setResponseBuffer(res.getRaw());
+    }
+    client.clearCgi();
+    armClientWrite(client, epollFd);
+}
+
+void Server::handleCgi(Client& client, const HTTP_Request& req, const LocationConfig* loc,
+                       int epollFd) {
+    const ServerConfig& config = findServerConfig(client, req);
+    try {
+        client.setCgi(std::make_unique<CgiHandler>());
+        client.cgi()->launch(createCgiRequest(client, req, loc));
+        client.setState(ClientState::CGI_RUNNING);
+        syncCgiEpoll(client, epollFd);
+
+        struct epoll_event ev {};
+        ev.events = EPOLLIN | EPOLLRDHUP;
+        ev.data.fd = client.getFd();
+        epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
+
+        if (client.cgi()->isFinished())
+            finishCgi(client, epollFd);
+    } catch (const std::exception&) {
+        client.clearCgi();
+        HttpResponse::RequestView view;
+        view.errorStatus = 500;
+        HttpResponse res;
+        res.buildForPath(view, config);
+        client.setResponseBuffer(res.getRaw());
+        armClientWrite(client, epollFd);
+    }
+}
+
+void Server::handleCgiPipeEvent(int pipeFd, uint32_t events, int epollFd) {
+    auto mapIt = cgiPipeToClient_.find(pipeFd);
+    if (mapIt == cgiPipeToClient_.end())
+        return;
+    auto clientIt = clients_.find(mapIt->second);
+    if (clientIt == clients_.end() || clientIt->second->cgi() == nullptr) {
+        epoll_ctl(epollFd, EPOLL_CTL_DEL, pipeFd, nullptr);
+        cgiPipeToClient_.erase(mapIt);
+        return;
+    }
+
+    Client& client = *(clientIt->second);
+    CgiHandler& cgi = *client.cgi();
+    if ((events & EPOLLOUT) && pipeFd == cgi.stdinFd())
+        cgi.onStdinReady();
+    if ((events & (EPOLLIN | EPOLLHUP | EPOLLERR)) && pipeFd == cgi.stdoutFd())
+        cgi.onStdoutReady();
+
+    syncCgiEpoll(client, epollFd);
+    if (cgi.isFinished())
+        finishCgi(client, epollFd);
+}
+
+void Server::checkCgiTimeouts(int epollFd) {
+    for (auto& entry : clients_) {
+        Client& client = *entry.second;
+        if (client.getState() != ClientState::CGI_RUNNING || client.cgi() == nullptr)
+            continue;
+        client.cgi()->checkTimeout();
+        if (client.cgi()->isFinished())
+            finishCgi(client, epollFd);
+        else
+            syncCgiEpoll(client, epollFd);
     }
 }
 
@@ -413,30 +576,24 @@ void Server::handleClientWrite(int clientFd, int epollFd,
     Client& client = *(it->second);
     const std::string& response = client.getResponseBuffer();
     if (client.getOffset() >= response.size()) {
-        epoll_ctl(epollFd, EPOLL_CTL_DEL, clientFd, nullptr);
-        clients_.erase(it);
+        closeClient(it, epollFd);
         return;
     }
 
     const size_t remaining = response.size() - client.getOffset();
-    const ssize_t sent =
-        send(clientFd, response.c_str() + client.getOffset(), remaining, 0);
+    const ssize_t sent = send(clientFd, response.c_str() + client.getOffset(), remaining, 0);
     if (sent < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK)
             return;
-        epoll_ctl(epollFd, EPOLL_CTL_DEL, clientFd, nullptr);
-        clients_.erase(it);
+        closeClient(it, epollFd);
         return;
     }
     if (sent == 0) {
-        epoll_ctl(epollFd, EPOLL_CTL_DEL, clientFd, nullptr);
-        clients_.erase(it);
+        closeClient(it, epollFd);
         return;
     }
 
     client.addOffset(static_cast<size_t>(sent));
-    if (client.getOffset() >= response.size()) {
-        epoll_ctl(epollFd, EPOLL_CTL_DEL, clientFd, nullptr);
-        clients_.erase(it);
-    }
+    if (client.getOffset() >= response.size())
+        closeClient(it, epollFd);
 }

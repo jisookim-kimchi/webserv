@@ -39,6 +39,7 @@ ServerConfig makeServer(const std::string& root) {
     upload.setPath("/upload");
     upload.setRoot(root + "/upload");
     upload.addAllowMethods("GET");
+    upload.addAllowMethods("POST");
     upload.addAllowMethods("DELETE");
     server.addLocation(upload);
 
@@ -108,6 +109,10 @@ int main() {
     expect(response.statusCode() == 204, "DELETE 204");
     struct stat st {};
     expect(stat(doomed.c_str(), &st) != 0, "deleted");
+
+    response.buildForPath(req("POST", "/upload/", "payload"), server);
+    expect(response.statusCode() == 201, "POST upload 201");
+    expect(response.getBody().find("Created") != std::string::npos, "upload body");
 
     HttpResponse::RequestView bad = req("GET", "/");
     bad.errorStatus = 400;

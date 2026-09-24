@@ -2,13 +2,16 @@
 /*
 client's are made only when server accept's
 */
+#include "CgiHandler.hpp"
+
+#include <ctime>
+#include <memory>
 #include <netinet/in.h>
 #include <string>
-#include <ctime>
 
-enum class ClientState
-{
+enum class ClientState {
     READING_REQUEST,
+    CGI_RUNNING,
     WRITING_RESPONSE,
     FINISHED
 };
@@ -42,9 +45,14 @@ class Client {
     void appendResponseBuffer(const char* data, size_t size);
     void clearResponseBuffer();
 
+    CgiHandler* cgi() { return cgi_.get(); }
+    void setCgi(std::unique_ptr<CgiHandler> cgi) { cgi_ = std::move(cgi); }
+    void clearCgi() { cgi_.reset(); }
+
    private:
     const Client& operator=(const Client& other) = delete;
     Client(const Client& other) = delete;
+
     size_t offset_ = 0;
     int fd_;
     struct sockaddr_in addr_;
@@ -55,4 +63,5 @@ class Client {
 
     ClientState state_;
     time_t lastActiveTime_;
+    std::unique_ptr<CgiHandler> cgi_;
 };
