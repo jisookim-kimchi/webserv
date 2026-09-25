@@ -150,7 +150,7 @@ Contains shared utility functions such as:
 - Keep configuration, networking, protocol parsing, response generation, and CGI handling independent.
 - Expose stable interfaces whenever possible and avoid direct dependencies on internal implementation details.
 - Make each module responsible for a single concern to simplify unit testing and debugging.
-- Keep the implementation compliant with C++98 and avoid introducing unnecessary modern syntax or library features.
+- Keep the implementation in C++17 (`-std=c++17`) as accepted for evaluation.
 
 ## Directory Conventions
 

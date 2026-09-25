@@ -58,10 +58,6 @@ void Client::appendRequestBuffer(const char* data, size_t size) {
     updateLastActiveTime();
 }
 
-void Client::clearRequestBuffer() {
-    requestBuffer_.clear();
-}
-
 const std::string& Client::getResponseBuffer() const {
     return responseBuffer_;
 }
@@ -74,14 +70,4 @@ void Client::setResponseBuffer(const std::string& response) {
     responseBuffer_ = response;
     offset_ = 0;
     updateLastActiveTime();
-}
-
-void Client::appendResponseBuffer(const char* data, size_t size) {
-    responseBuffer_.append(data, size);
-    updateLastActiveTime();
-}
-
-void Client::clearResponseBuffer() {
-    responseBuffer_.clear();
-    offset_ = 0;
 }

@@ -59,8 +59,7 @@ std::string headerToCgiEnvKey(const std::string& headerName) {
 }
 
 void setNonBlocking(int fd) {
-    const int flags = fcntl(fd, F_GETFL, 0);
-    if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+    if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
         throw std::runtime_error(std::string("fcntl(O_NONBLOCK) failed: ") + std::strerror(errno));
 }
 

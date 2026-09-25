@@ -10,6 +10,9 @@ namespace LocationMatch {
 // Longest prefix match; extension locations (e.g. ".py") win when applicable.
 const LocationConfig* match(const std::string& urlPath, const ServerConfig& server);
 
+// Longest prefix location that has a non-empty root (skips extension-only locations).
+const LocationConfig* matchPrefixWithRoot(const std::string& urlPath, const ServerConfig& server);
+
 }  // namespace LocationMatch
 
 // Builds HTTP/1.1 responses for an already-matched location (Overview).
@@ -73,7 +76,6 @@ class HttpResponse {
                               const LocationConfig* loc) const;
     static std::string defaultErrorBody(int code);
     static std::string contentType(const std::string& path);
-    static std::string joinPath(const std::string& a, const std::string& b);
     static bool isDir(const std::string& path);
     static bool isFile(const std::string& path);
     static bool readAll(const std::string& path, std::string& out);
