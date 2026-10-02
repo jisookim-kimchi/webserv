@@ -1,7 +1,6 @@
 #include "../includes/CgiHandler.hpp"
 #include "test_utils.hpp"
 
-#include <poll.h>
 #include <unistd.h>
 
 #include <cstdlib>
@@ -42,52 +41,6 @@ CgiHandler::Request baseRequest(const std::string& script) {
     request.remoteAddr = "127.0.0.1";
     request.headers["Host"] = "127.0.0.1:8080";
     return request;
-}
-
-CgiHandler::Result runWithSharedPollStyle(const CgiHandler::Request& request, int timeoutMs) {
-    CgiHandler cgi;
-    cgi.launch(request, timeoutMs);
-
-    while (cgi.isRunning()) {
-        cgi.checkTimeout();
-        if (!cgi.isRunning())
-            break;
-
-        pollfd fds[2];
-        nfds_t nfds = 0;
-        int stdinIndex = -1;
-        int stdoutIndex = -1;
-
-        if (cgi.stdinEvents() != 0) {
-            stdinIndex = static_cast<int>(nfds);
-            fds[nfds].fd = cgi.stdinFd();
-            fds[nfds].events = cgi.stdinEvents();
-            fds[nfds].revents = 0;
-            ++nfds;
-        }
-        if (cgi.stdoutEvents() != 0) {
-            stdoutIndex = static_cast<int>(nfds);
-            fds[nfds].fd = cgi.stdoutFd();
-            fds[nfds].events = cgi.stdoutEvents();
-            fds[nfds].revents = 0;
-            ++nfds;
-        }
-        if (nfds == 0)
-            break;
-
-        const int ready = poll(fds, nfds, 200);
-        if (ready <= 0)
-            continue;
-
-        if (stdinIndex >= 0 && fds[stdinIndex].revents)
-            cgi.onStdinReady();
-        if (cgi.isRunning() && stdoutIndex >= 0 && fds[stdoutIndex].revents)
-            cgi.onStdoutReady();
-    }
-
-    if (cgi.state() == CgiHandler::State::Done)
-        return cgi.result();
-    throw std::runtime_error(cgi.errorMessage().empty() ? "CGI failed" : cgi.errorMessage());
 }
 
 void echo_post_body_and_query() {
@@ -160,9 +113,9 @@ void timeout_kills_slow_script() {
     EXPECT_TRUE(time(nullptr) - started <= 3);
 }
 
-void poll_style_session_api() {
+void execute_session_api() {
     auto request = baseRequest("redirect.py");
-    const CgiHandler::Result result = runWithSharedPollStyle(request, 3000);
+    const CgiHandler::Result result = CgiHandler::execute(request, 3000);
     EXPECT_EQ(result.statusCode, 302);
     EXPECT_EQ(headerValue(result.headers, "Location"), std::string("/elsewhere"));
 }
@@ -189,7 +142,7 @@ int main() {
     failed += runTest("env_http_headers", env_http_headers);
     failed += runTest("relative_working_directory", relative_working_directory);
     failed += runTest("timeout_kills_slow_script", timeout_kills_slow_script);
-    failed += runTest("poll_style_session_api", poll_style_session_api);
+    failed += runTest("execute_session_api", execute_session_api);
     failed += runTest("missing_script_throws", missing_script_throws);
     std::cout << "-- cgi: " << (8 - failed) << "/8 passed\n";
     return failed == 0 ? 0 : 1;

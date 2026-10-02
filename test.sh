@@ -38,7 +38,7 @@ build_http_response() {
   echo "[build] test_http_response"
   "$CXX" "${CXXFLAGS[@]}" \
     tests/test_http_response.cpp \
-    srcs/HttpResponse.cpp srcs/LocationConfig.cpp srcs/ServerConfig.cpp \
+    srcs/HttpResponse.cpp srcs/LocationConfig.cpp srcs/ServerConfig.cpp srcs/Utils.cpp \
     -o build/test_http_response
 }
 

@@ -12,8 +12,7 @@ client's are made only when server accept's
 enum class ClientState {
     READING_REQUEST,
     CGI_RUNNING,
-    WRITING_RESPONSE,
-    FINISHED
+    WRITING_RESPONSE
 };
 
 class Client {
@@ -37,13 +36,10 @@ class Client {
     const std::string& getRequestBuffer() const;
     std::string& getRequestBuffer();
     void appendRequestBuffer(const char* data, size_t size);
-    void clearRequestBuffer();
 
     const std::string& getResponseBuffer() const;
     std::string& getResponseBuffer();
     void setResponseBuffer(const std::string& response);
-    void appendResponseBuffer(const char* data, size_t size);
-    void clearResponseBuffer();
 
     CgiHandler* cgi() { return cgi_.get(); }
     void setCgi(std::unique_ptr<CgiHandler> cgi) { cgi_ = std::move(cgi); }

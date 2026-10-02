@@ -1,11 +1,11 @@
 #include "../includes/HttpResponse.hpp"
+#include "../includes/Utils.hpp"
 
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <ctime>
 #include <fstream>
@@ -13,13 +13,6 @@
 #include <vector>
 
 namespace {
-
-std::string toLower(std::string s) {
-    for (char& c : s) {
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-    return s;
-}
 
 std::string normalizePath(const std::string& path) {
     if (path.empty()) {
@@ -105,6 +98,30 @@ const LocationConfig* match(const std::string& urlPath, const ServerConfig& serv
         }
     }
     return ext != nullptr ? ext : best;
+}
+
+const LocationConfig* matchPrefixWithRoot(const std::string& urlPath, const ServerConfig& server) {
+    const std::string path = normalizePath(urlPath);
+    const LocationConfig* best = nullptr;
+    std::size_t bestLen = 0;
+
+    for (const LocationConfig& loc : server.getLocations()) {
+        const std::string& lp = loc.getPath();
+        if (lp.empty() || lp[0] == '.' || loc.getRoot().empty()) {
+            continue;
+        }
+        if (path.compare(0, lp.size(), lp) != 0) {
+            continue;
+        }
+        if (lp != "/" && path.size() > lp.size() && path[lp.size()] != '/') {
+            continue;
+        }
+        if (lp.size() >= bestLen) {
+            bestLen = lp.size();
+            best = &loc;
+        }
+    }
+    return best;
 }
 
 }  // namespace LocationMatch
@@ -216,7 +233,7 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
                 setError(404, server, &location);
                 return;
             }
-            dest = joinPath(fsPath, "upload_" + std::to_string(static_cast<long long>(::time(nullptr))));
+            dest = Utils::joinPath(fsPath, "upload_" + std::to_string(static_cast<long long>(::time(nullptr))));
         }
         {
             std::ofstream out(dest.c_str(), std::ios::binary | std::ios::trunc);
@@ -243,7 +260,7 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
     // GET
     if (isDir(fsPath)) {
         for (const std::string& index : location.getIndex()) {
-            const std::string candidate = joinPath(fsPath, index);
+            const std::string candidate = Utils::joinPath(fsPath, index);
             if (isFile(candidate)) {
                 setFile(candidate);
                 return;
@@ -291,7 +308,7 @@ std::string HttpResponse::mapUrlToFs(const LocationConfig& loc, const std::strin
     if (!relative.empty() && relative[0] == '/') {
         relative.erase(0, 1);
     }
-    return joinPath(root, relative);
+    return Utils::joinPath(root, relative);
 }
 
 void HttpResponse::setError(int code, const ServerConfig& server, const LocationConfig* loc) {
@@ -418,11 +435,11 @@ std::string HttpResponse::loadErrorPage(int code, const ServerConfig& server,
         candidates.push_back(configured);
     }
     if (loc != nullptr && !loc->getRoot().empty()) {
-        candidates.push_back(joinPath(loc->getRoot(), configured));
+        candidates.push_back(Utils::joinPath(loc->getRoot(), configured));
     }
     for (const LocationConfig& l : server.getLocations()) {
         if (l.getPath() == "/" && !l.getRoot().empty()) {
-            candidates.push_back(joinPath(l.getRoot(), configured));
+            candidates.push_back(Utils::joinPath(l.getRoot(), configured));
             break;
         }
     }
@@ -446,7 +463,7 @@ std::string HttpResponse::contentType(const std::string& path) {
     if (dot == std::string::npos) {
         return "application/octet-stream";
     }
-    const std::string ext = toLower(path.substr(dot + 1));
+    const std::string ext = Utils::toLower(path.substr(dot + 1));
     if (ext == "html" || ext == "htm") {
         return "text/html";
     }
@@ -466,23 +483,6 @@ std::string HttpResponse::contentType(const std::string& path) {
         return "text/plain";
     }
     return "application/octet-stream";
-}
-
-std::string HttpResponse::joinPath(const std::string& a, const std::string& b) {
-    if (a.empty()) {
-        return b;
-    }
-    if (b.empty()) {
-        return a;
-    }
-    std::string right = b;
-    if (right[0] == '/') {
-        right.erase(0, 1);
-    }
-    if (a.back() == '/') {
-        return a + right;
-    }
-    return a + "/" + right;
 }
 
 bool HttpResponse::isDir(const std::string& path) {

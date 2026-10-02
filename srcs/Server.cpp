@@ -14,11 +14,14 @@
 #include <string>
 #include <sys/epoll.h>
 #include <sys/socket.h>
+#include <ctime>
 #include <unistd.h>
 
 constexpr int MAX_EVENTS = 256;
 constexpr size_t BUF_SIZE = 65536;
 constexpr int CGI_POLL_TIMEOUT_MS = 200;
+constexpr int IDLE_POLL_TIMEOUT_MS = 1000;
+constexpr time_t CLIENT_IDLE_TIMEOUT_SEC = 60;
 
 namespace {
 
@@ -30,11 +33,7 @@ std::string headerValue(const std::string& headersBlock, const std::string& keyL
             lineEnd = headersBlock.size();
         size_t colon = headersBlock.find(':', pos);
         if (colon != std::string::npos && colon < lineEnd) {
-            std::string name = headersBlock.substr(pos, colon - pos);
-            for (size_t i = 0; i < name.size(); ++i) {
-                if (name[i] >= 'A' && name[i] <= 'Z')
-                    name[i] |= 0x20;
-            }
+            const std::string name = Utils::toLower(headersBlock.substr(pos, colon - pos));
             if (name == keyLower) {
                 size_t valStart = colon + 1;
                 while (valStart < lineEnd &&
@@ -131,25 +130,10 @@ std::string resolveScriptPath(const HttpResponse& mapper, const ServerConfig& se
     std::string fs = mapper.mapUrlToFs(loc, urlPath);
     if (!fs.empty())
         return fs;
-
-    const LocationConfig* best = nullptr;
-    size_t bestLen = 0;
-    for (const LocationConfig& candidate : server.getLocations()) {
-        const std::string& lp = candidate.getPath();
-        if (lp.empty() || lp[0] == '.' || candidate.getRoot().empty())
-            continue;
-        if (urlPath.compare(0, lp.size(), lp) != 0)
-            continue;
-        if (lp != "/" && urlPath.size() > lp.size() && urlPath[lp.size()] != '/')
-            continue;
-        if (lp.size() >= bestLen) {
-            bestLen = lp.size();
-            best = &candidate;
-        }
-    }
-    if (best == nullptr)
+    const LocationConfig* rooted = LocationMatch::matchPrefixWithRoot(urlPath, server);
+    if (rooted == nullptr)
         return "";
-    return mapper.mapUrlToFs(*best, urlPath);
+    return mapper.mapUrlToFs(*rooted, urlPath);
 }
 
 uint32_t pollToEpoll(short pevents) {
@@ -193,10 +177,16 @@ Server::Server(const Server& other) {
 }
 
 Server::Server(const std::vector<ServerConfig>& serverConfigs) : serverConfigs_(serverConfigs) {
+    std::map<std::string, bool> seenListen;
     for (const auto& serverConfig : serverConfigs_) {
         const std::string& host = serverConfig.getHost();
         const std::vector<uint16_t>& ports = serverConfig.getPort();
         for (const auto& port : ports) {
+            const std::string key = host + ":" + std::to_string(port);
+            if (seenListen.count(key) != 0)
+                throw std::runtime_error("duplicate listen address: " + key);
+            seenListen[key] = true;
+
             std::unique_ptr<ListenSocket> socket = std::make_unique<ListenSocket>();
             socket->createSocket();
             socket->setSocketOption();
@@ -242,7 +232,12 @@ void Server::run() {
 
     struct epoll_event events[MAX_EVENTS]{};
     while (true) {
-        const int timeout = hasActiveCgi() ? CGI_POLL_TIMEOUT_MS : -1;
+        int timeout = -1;
+        if (hasActiveCgi())
+            timeout = CGI_POLL_TIMEOUT_MS;
+        else if (!clients_.empty())
+            timeout = IDLE_POLL_TIMEOUT_MS;
+
         int eventCount = epoll_wait(epollFd, events, MAX_EVENTS, timeout);
         if (eventCount == -1) {
             if (errno == EINTR)
@@ -280,6 +275,7 @@ void Server::run() {
         }
 
         checkCgiTimeouts(epollFd);
+        checkIdleClients(epollFd);
     }
 }
 
@@ -292,8 +288,7 @@ void Server::handleNewConnection(int listenFd, int epollFd) {
     if (clientFd == -1)
         return;
 
-    int flags = fcntl(clientFd, F_GETFL, 0);
-    if (flags == -1 || fcntl(clientFd, F_SETFL, flags | O_NONBLOCK) == -1) {
+    if (fcntl(clientFd, F_SETFL, O_NONBLOCK) == -1) {
         close(clientFd);
         return;
     }
@@ -571,6 +566,20 @@ void Server::checkCgiTimeouts(int epollFd) {
     }
 }
 
+void Server::checkIdleClients(int epollFd) {
+    const time_t now = std::time(nullptr);
+    for (auto it = clients_.begin(); it != clients_.end();) {
+        if (now - it->second->getLastActiveTime() > CLIENT_IDLE_TIMEOUT_SEC) {
+            auto next = it;
+            ++next;
+            closeClient(it, epollFd);
+            it = next;
+        } else {
+            ++it;
+        }
+    }
+}
+
 void Server::handleClientWrite(int clientFd, int epollFd,
                                std::map<int, std::unique_ptr<Client>>::iterator it) {
     Client& client = *(it->second);
@@ -582,18 +591,13 @@ void Server::handleClientWrite(int clientFd, int epollFd,
 
     const size_t remaining = response.size() - client.getOffset();
     const ssize_t sent = send(clientFd, response.c_str() + client.getOffset(), remaining, 0);
-    if (sent < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-            return;
-        closeClient(it, epollFd);
-        return;
-    }
-    if (sent == 0) {
+    if (sent <= 0) {
         closeClient(it, epollFd);
         return;
     }
 
     client.addOffset(static_cast<size_t>(sent));
+    client.updateLastActiveTime();
     if (client.getOffset() >= response.size())
         closeClient(it, epollFd);
 }

@@ -5,45 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>webserv</title>
   <style>
-    :root {
-      --bg: #0f1419;
-      --fg: #e7ecf1;
-      --muted: #9aa7b5;
-      --accent: #3d9cfd;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-      color: var(--fg);
-      background:
-        radial-gradient(circle at top left, #1b2a3a, transparent 45%),
-        linear-gradient(160deg, #0f1419, #151c24 60%, #10161d);
-      display: grid;
-      place-items: center;
-      padding: 2rem;
-    }
-    main { max-width: 40rem; }
-    h1 {
-      margin: 0 0 0.5rem;
-      font-size: clamp(2.4rem, 6vw, 3.6rem);
-      letter-spacing: -0.04em;
-    }
-    p { color: var(--muted); line-height: 1.6; }
-    ul { padding-left: 1.2rem; color: var(--muted); }
-    a { color: var(--accent); }
+    body { margin: 2rem; font-family: sans-serif; line-height: 1.5; }
+    a { color: #0645ad; }
+    code { background: #eee; padding: 0.1em 0.35em; }
   </style>
 </head>
 <body>
-  <main>
-    <h1>webserv</h1>
-    <p>Static site root for the 42 HTTP/1.1 server.</p>
-    <ul>
-      <li><a href="/cgi-bin/hello.py">CGI hello</a></li>
-      <li><a href="/cgi-bin/echo.py">CGI echo</a></li>
-      <li><a href="/upload/">Upload directory</a></li>
-    </ul>
-  </main>
+  <h1>webserv</h1>
+  <p>Static site root for the 42 HTTP/1.1 server.</p>
+  <ul>
+    <li><a href="/cgi-bin/hello.py">CGI hello</a></li>
+    <li><a href="/cgi-bin/echo.py">CGI echo</a></li>
+    <li><a href="/upload/">Upload directory</a> (autoindex)</li>
+    <li><a href="/redirect">Redirect</a></li>
+  </ul>
+  <h2>Upload (POST raw body)</h2>
+  <pre><code>curl -X POST --data-binary @file.txt http://127.0.0.1:8080/upload/</code></pre>
+  <h2>Delete</h2>
+  <pre><code>curl -X DELETE http://127.0.0.1:8080/upload/FILENAME</code></pre>
 </body>
 </html>
