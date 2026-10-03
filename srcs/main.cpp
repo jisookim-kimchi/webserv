@@ -4,12 +4,12 @@
 
 int main(int argc, char** argv)
 {
-    std::string configPath = "configs/test.config";
+    std::string configPath;
     if (argc == 2)
         configPath = argv[1];
-    else if (argc > 2)
+    else
     {
-        std::cerr << "too many arguments\n";
+        std::cerr << "usage : ./webserv [config file]\n";
         return 1;
     }
     try

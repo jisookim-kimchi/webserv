@@ -27,18 +27,9 @@ void ConfigParser::parse(const std::string& filename) {
         if (tokens[index] == "server") {
             parseServer(tokens, index);
         } else {
-            std::cout << "error : unexpected token outside server: " << tokens[index] << '\n';
-            exit(1);
+            throw std::invalid_argument("error : unexpected token outside server: " + tokens[index]);
         }
     }
-
-    std::ofstream outfile("tests/test_tokenize.txt");
-
-    for (size_t i = 0; i < tokens.size(); ++i) {
-        outfile << "[" << i << "] ----> " << tokens[i] << '\n';
-    }
-
-    outfile.close();
 }
 
 /*
@@ -166,13 +157,21 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
     const std::string& found = tokens[index];
     if (found == "listen") {
         index++;
-        if (index < tokens.size())
-            server.addPort(std::stoi(tokens[index]));
+        if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
+            throw std::invalid_argument("error: 'empty' port number for 'listen'");
+        }
+        int port = std::stoi(tokens[index]);
+        if (port > 65535 || port <= 0) {
+            throw std::invalid_argument("bad port number: " + tokens[index]);
+        }
+        server.addPort(static_cast<uint16_t>(port));
         index++;
     } else if (found == "host") {
         index++;
-        if (index < tokens.size())
-            server.setHost(tokens[index]);
+        if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
+            throw std::invalid_argument("error: 'empty' argument for 'host'");
+        }
+        server.setHost(tokens[index]);
         index++;
     } else if (found == "server_name") {
         index++;
@@ -182,18 +181,23 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
         }
     } else if (found == "client_max_body_size") {
         index++;
-        if (index < tokens.size()) {
-            uint64_t cmbs = std::stoull(tokens[index]);
-            char unit = tokens[index].back();
-
-            if (unit == 'K' || unit == 'k')
-                cmbs *= 1024ULL;
-            else if (unit == 'M' || unit == 'm')
-                cmbs *= 1024ULL * 1024ULL;
-            else if (unit == 'G' || unit == 'g')
-                cmbs *= 1024ULL * 1024ULL * 1024ULL;
-            server.setClientMaxBodySize(cmbs);
+        if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
+            throw std::invalid_argument("error: bad argument for 'client_max_body_size'");
         }
+        uint64_t cmbs = 0;
+        try {
+            cmbs = std::stoull(tokens[index]);
+        } catch (...) {
+            throw std::invalid_argument("bad client_max_body_size: " + tokens[index]);
+        }
+        char unit = tokens[index].back();
+        if (unit == 'K' || unit == 'k')
+            cmbs *= 1024ULL;
+        else if (unit == 'M' || unit == 'm')
+            cmbs *= 1024ULL * 1024ULL;
+        else if (unit == 'G' || unit == 'g')
+            cmbs *= 1024ULL * 1024ULL * 1024ULL;
+        server.setClientMaxBodySize(cmbs);
         index++;
     } else if (found == "error_page") {
         index++;
@@ -203,16 +207,25 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
             args.push_back(tokens[index]);
             index++;
         }
-        if (args.size() >= 2) {
-            std::string file_path = args.back();
-            args.pop_back();
-            for (size_t i = 0; i < args.size(); i++) {
-                server.addErrorPagePath(std::stoi(args[i]), file_path);
+        if (args.size() < 2) {
+            throw std::invalid_argument("error: error_page requires status code and a file path");
+        }
+        std::string file_path = args.back();
+        args.pop_back();
+        for (size_t i = 0; i < args.size(); i++) {
+            try {
+                int code = std::stoi(args[i]);
+                if (code < 100 || code > 599)
+                    throw std::invalid_argument("status code out of range in error_page: " + args[i]);
+                server.addErrorPagePath(code, file_path);
+            } catch (const std::out_of_range&) {
+                throw std::invalid_argument("status code out of range in error_page: " + args[i]);
+            } catch (const std::invalid_argument&) {
+                throw std::invalid_argument("bad status code in error_page: " + args[i]);
             }
         }
     } else {
-        std::cout << "error : unknown server keyword  in  parseServerKeyword()\n";
-        exit(1);
+        throw std::invalid_argument("unknown server keyword: " + tokens[index]);
     }
 
     if (index < tokens.size() && tokens[index] == ";")
@@ -256,11 +269,21 @@ void ConfigParser::parseLocationKeyword(const std::vector<std::string>& tokens, 
         index++;
     } else if (found == "return") {
         index++;
+        if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
+            throw std::runtime_error("error: missing arguments for 'return'");
+        }
         uint16_t status_code = 0;
         std::string target_url = "";
-        if (index < tokens.size() && tokens[index] != ";") {
+        try {
             status_code = static_cast<uint16_t>(std::stoi(tokens[index]));
+            if (status_code < 100 || status_code > 599)
+                throw std::runtime_error("status code out of range in return: " + tokens[index]);
             index++;
+        } catch (const std::out_of_range&) {
+            throw std::runtime_error("status code out of range in return: " + tokens[index]);
+        } 
+        catch (const std::invalid_argument&) {
+            throw std::runtime_error("invalid status code in return directive: " + tokens[index]);
         }
         if (index < tokens.size() && tokens[index] != ";") {
             target_url = tokens[index];
@@ -273,8 +296,7 @@ void ConfigParser::parseLocationKeyword(const std::vector<std::string>& tokens, 
             location.setCgiPass(tokens[index]);
         index++;
     } else {
-        std::cout << "error : unknown location keyword  in  parseLocationKeyword()\n";
-        exit(1);
+        throw std::runtime_error("unknown location keyword: " + tokens[index]);
     }
 
     if (index < tokens.size() && tokens[index] == ";")
