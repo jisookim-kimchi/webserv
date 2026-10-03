@@ -27,18 +27,9 @@ void ConfigParser::parse(const std::string& filename) {
         if (tokens[index] == "server") {
             parseServer(tokens, index);
         } else {
-            std::cout << "error : unexpected token outside server: " << tokens[index] << '\n';
-            exit(1);
+            throw std::invalid_argument("error : unexpected token outside server: " + tokens[index]);
         }
     }
-
-    std::ofstream outfile("tests/test_tokenize.txt");
-
-    for (size_t i = 0; i < tokens.size(); ++i) {
-        outfile << "[" << i << "] ----> " << tokens[i] << '\n';
-    }
-
-    outfile.close();
 }
 
 /*
@@ -167,18 +158,18 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
     if (found == "listen") {
         index++;
         if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
-            throw std::runtime_error("error: 'zero' port number for 'listen'");
+            throw std::invalid_argument("error: 'empty' port number for 'listen'");
         }
         int port = std::stoi(tokens[index]);
         if (port > 65535 || port <= 0) {
-            throw std::runtime_error("bad port number: " + tokens[index]);
+            throw std::invalid_argument("bad port number: " + tokens[index]);
         }
         server.addPort(static_cast<uint16_t>(port));
         index++;
     } else if (found == "host") {
         index++;
         if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
-            throw std::runtime_error("error: 'zero' argument for 'host'");
+            throw std::invalid_argument("error: 'empty' argument for 'host'");
         }
         server.setHost(tokens[index]);
         index++;
@@ -191,13 +182,13 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
     } else if (found == "client_max_body_size") {
         index++;
         if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
-            throw std::runtime_error("error: bad argument for 'client_max_body_size'");
+            throw std::invalid_argument("error: bad argument for 'client_max_body_size'");
         }
         uint64_t cmbs = 0;
         try {
             cmbs = std::stoull(tokens[index]);
         } catch (...) {
-            throw std::runtime_error("bad client_max_body_size: " + tokens[index]);
+            throw std::invalid_argument("bad client_max_body_size: " + tokens[index]);
         }
         char unit = tokens[index].back();
         if (unit == 'K' || unit == 'k')
@@ -217,7 +208,7 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
             index++;
         }
         if (args.size() < 2) {
-            throw std::runtime_error("error: error_page requires status code and a file path");
+            throw std::invalid_argument("error: error_page requires status code and a file path");
         }
         std::string file_path = args.back();
         args.pop_back();
@@ -225,14 +216,16 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
             try {
                 int code = std::stoi(args[i]);
                 if (code < 100 || code > 599)
-                    throw std::runtime_error("status code out of range in error_page: " + args[i]);
+                    throw std::invalid_argument("status code out of range in error_page: " + args[i]);
                 server.addErrorPagePath(code, file_path);
+            } catch (const std::out_of_range&) {
+                throw std::invalid_argument("status code out of range in error_page: " + args[i]);
             } catch (const std::invalid_argument&) {
-                throw std::runtime_error("bad status code in error_page: " + args[i]);
+                throw std::invalid_argument("bad status code in error_page: " + args[i]);
             }
         }
     } else {
-        throw std::runtime_error("unknown server keyword: " + tokens[index]);
+        throw std::invalid_argument("unknown server keyword: " + tokens[index]);
     }
 
     if (index < tokens.size() && tokens[index] == ";")
@@ -286,7 +279,10 @@ void ConfigParser::parseLocationKeyword(const std::vector<std::string>& tokens, 
             if (status_code < 100 || status_code > 599)
                 throw std::runtime_error("status code out of range in return: " + tokens[index]);
             index++;
-        } catch (const std::invalid_argument&) {
+        } catch (const std::out_of_range&) {
+            throw std::runtime_error("status code out of range in return: " + tokens[index]);
+        } 
+        catch (const std::invalid_argument&) {
             throw std::runtime_error("invalid status code in return directive: " + tokens[index]);
         }
         if (index < tokens.size() && tokens[index] != ";") {

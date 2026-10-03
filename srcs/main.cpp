@@ -10,7 +10,7 @@ int main(int argc, char** argv)
     else
     {
         std::cerr << "usage : ./webserv [config file]\n";
-        exit(1);
+        return 1;
     }
     try
     {
@@ -21,7 +21,7 @@ int main(int argc, char** argv)
     } catch (const std::exception& e)
     {
         std::cerr << "Error: " << e.what() << "\n";
-        exit(1);
+        return 1;
     }
 
     return 0;
