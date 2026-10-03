@@ -58,10 +58,3 @@ See [docs/eval-checklist.md](docs/eval-checklist.md) for Siege and peer-evaluati
 - [epoll(7)](https://man7.org/linux/man-pages/man7/epoll.7.html)
 - [CGI /1.1](https://datatracker.ietf.org/doc/html/rfc3875)
 
-### AI use
-
-AI assistants were used to draft and refactor modules (config parsing, HTTP
-request/response, CGI epoll wiring), to prepare evaluation hardening (timeouts,
-README, errno/`fcntl` compliance), and to write unit tests and documentation.
-All generated code was reviewed, tested, and adapted by the authors before
-inclusion.
