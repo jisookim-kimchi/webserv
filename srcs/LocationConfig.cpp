@@ -24,6 +24,8 @@ LocationConfig& LocationConfig::operator=(const LocationConfig& other) {
         index_ = other.index_;
         redirection_ = other.redirection_;
         cgi_pass_ = other.cgi_pass_;
+        client_max_body_size_ = other.client_max_body_size_;
+        has_client_max_body_size_ = other.has_client_max_body_size_;
         autoindex_ = other.autoindex_;
     }
     return *this;
