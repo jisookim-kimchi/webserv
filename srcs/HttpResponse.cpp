@@ -147,6 +147,8 @@ std::string HttpResponse::statusText(int code) {
     switch (code) {
         case 200:
             return "OK";
+        case 201:
+            return "Created";
         case 204:
             return "No Content";
         case 301:
