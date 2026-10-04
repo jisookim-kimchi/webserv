@@ -370,7 +370,8 @@ void Server::processRequest(Client& client, int epollFd) {
         res.buildForPath(view, config);
 
         if (res.needsCgi()) {
-            const LocationConfig* loc = LocationMatch::match(req.getPath(), config);
+            const LocationConfig* loc =
+                LocationMatch::match(req.getPath(), req.getMethodString(), config);
             handleCgi(client, req, loc, epollFd);
             return;
         }

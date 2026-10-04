@@ -68,7 +68,8 @@ std::string normalizePath(const std::string& path) {
 
 namespace LocationMatch {
 
-const LocationConfig* match(const std::string& urlPath, const ServerConfig& server) {
+const LocationConfig* match(const std::string& urlPath, const std::string& method,
+                            const ServerConfig& server) {
     const std::string path = normalizePath(urlPath);
     const LocationConfig* best = nullptr;
     std::size_t bestLen = 0;
@@ -82,7 +83,11 @@ const LocationConfig* match(const std::string& urlPath, const ServerConfig& serv
         if (lp[0] == '.') {
             if (path.size() >= lp.size() &&
                 path.compare(path.size() - lp.size(), lp.size(), lp) == 0) {
-                ext = &loc;
+                const auto& methods = loc.getAllowMethods();
+                if (methods.empty() ||
+                    std::find(methods.begin(), methods.end(), method) != methods.end()) {
+                    ext = &loc;
+                }
             }
             continue;
         }
@@ -98,6 +103,10 @@ const LocationConfig* match(const std::string& urlPath, const ServerConfig& serv
         }
     }
     return ext != nullptr ? ext : best;
+}
+
+const LocationConfig* match(const std::string& urlPath, const ServerConfig& server) {
+    return match(urlPath, "GET", server);
 }
 
 const LocationConfig* matchPrefixWithRoot(const std::string& urlPath, const ServerConfig& server) {
@@ -166,7 +175,7 @@ std::string HttpResponse::statusText(int code) {
 }
 
 bool HttpResponse::buildForPath(const RequestView& request, const ServerConfig& server) {
-    const LocationConfig* loc = LocationMatch::match(request.path, server);
+    const LocationConfig* loc = LocationMatch::match(request.path, request.method, server);
     if (loc == nullptr) {
         setError(404, server, nullptr);
         return false;
@@ -184,7 +193,9 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
         return;
     }
 
-    const std::uint64_t limit = server.getClientMaxBodySize();
+    const std::uint64_t limit = location.hasClientMaxBodySize()
+                                    ? location.getClientMaxBodySize()
+                                    : server.getClientMaxBodySize();
     if (limit != 0 && request.body.size() > static_cast<std::size_t>(limit)) {
         setError(413, server, &location);
         return;
@@ -200,8 +211,8 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
         setRedirect(static_cast<int>(redir.first), redir.second);
         return;
     }
-    //TODO : since here i did hardcoding we need to find better solution.
-    if (!location.getCgiPass().empty() && request.method == "POST") {
+
+    if (!location.getCgiPass().empty()) {
         needsCgi_ = true;
         return;
     }
