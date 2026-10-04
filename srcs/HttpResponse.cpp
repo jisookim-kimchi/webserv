@@ -200,8 +200,8 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
         setRedirect(static_cast<int>(redir.first), redir.second);
         return;
     }
-
-    if (!location.getCgiPass().empty()) {
+    //TODO : since here i did hardcoding we need to find better solution.
+    if (!location.getCgiPass().empty() && request.method == "POST") {
         needsCgi_ = true;
         return;
     }
