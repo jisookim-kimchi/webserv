@@ -295,7 +295,29 @@ void ConfigParser::parseLocationKeyword(const std::vector<std::string>& tokens, 
         if (index < tokens.size() && tokens[index] != ";")
             location.setCgiPass(tokens[index]);
         index++;
-    } else {
+    } else if (found == "client_max_body_size")
+    {
+        index++;
+        if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
+            throw std::invalid_argument("error: bad argument for 'client_max_body_size'");
+        }
+        uint64_t cmbs = 0;
+        try {
+            cmbs = std::stoull(tokens[index]);
+        } catch (...) {
+            throw std::invalid_argument("bad client_max_body_size: " + tokens[index]);
+        }
+        char unit = tokens[index].back();
+        if (unit == 'K' || unit == 'k')
+            cmbs *= 1024ULL;
+        else if (unit == 'M' || unit == 'm')
+            cmbs *= 1024ULL * 1024ULL;
+        else if (unit == 'G' || unit == 'g')
+            cmbs *= 1024ULL * 1024ULL * 1024ULL;
+        location.setClientMaxBodySize(cmbs);
+        index++;
+    }
+    else {
         throw std::runtime_error("unknown location keyword: " + tokens[index]);
     }
 

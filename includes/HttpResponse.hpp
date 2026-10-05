@@ -7,7 +7,9 @@
 
 namespace LocationMatch {
 
-// Longest prefix match; extension locations (e.g. ".py") win when applicable.
+// Longest prefix match; extension locations (e.g. ".py") win when applicable and method allowed.
+const LocationConfig* match(const std::string& urlPath, const std::string& method,
+                            const ServerConfig& server);
 const LocationConfig* match(const std::string& urlPath, const ServerConfig& server);
 
 // Longest prefix location that has a non-empty root (skips extension-only locations).

@@ -370,7 +370,8 @@ void Server::processRequest(Client& client, int epollFd) {
         res.buildForPath(view, config);
 
         if (res.needsCgi()) {
-            const LocationConfig* loc = LocationMatch::match(req.getPath(), config);
+            const LocationConfig* loc =
+                LocationMatch::match(req.getPath(), req.getMethodString(), config);
             handleCgi(client, req, loc, epollFd);
             return;
         }
@@ -437,6 +438,8 @@ CgiHandler::Request Server::createCgiRequest(Client& client, const HTTP_Request&
     cgiReq.requestBody = req.getBody();
     cgiReq.headers = req.getHeaders();
     cgiReq.scriptName = req.getPath();
+    cgiReq.pathInfo = req.getPath();
+    cgiReq.pathTranslated = cgiReq.scriptPath;
     cgiReq.serverPort = std::to_string(client.getServerPort());
     cgiReq.serverName =
         config.getServerName().empty() ? "localhost" : config.getServerName()[0];

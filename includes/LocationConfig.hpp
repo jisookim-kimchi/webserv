@@ -33,6 +33,14 @@ class LocationConfig {
     const std::string& getCgiPath() const {
         return cgi_pass_;
     }
+    uint64_t getClientMaxBodySize() const {
+        return client_max_body_size_;
+    }
+
+    bool hasClientMaxBodySize() const {
+        return has_client_max_body_size_;
+    }
+
     bool getAutoindex() const {
         return autoindex_;
     }
@@ -63,6 +71,10 @@ class LocationConfig {
     void setAutoindex(bool autoindex) {
         autoindex_ = autoindex;
     }
+    void setClientMaxBodySize(const uint64_t& client_max_body_size) {
+        client_max_body_size_ = client_max_body_size;
+        has_client_max_body_size_ = true;
+    }
 
    private:
     std::string root_;                              // Rootpath
@@ -71,5 +83,7 @@ class LocationConfig {
     std::vector<std::string> index_;                // Default html
     std::pair<uint16_t, std::string> redirection_;  // Redirection [status code] - [target url]
     std::string cgi_pass_;                          // CGI pass [path]
+    uint64_t client_max_body_size_ = 0;             // (0 == max) size is default
+    bool has_client_max_body_size_ = false;         // to check if a specific size is assigned
     bool autoindex_;                                // 1 : on, 0 : off
 };
