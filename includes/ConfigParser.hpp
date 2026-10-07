@@ -18,7 +18,7 @@ class ConfigParser {
 
    private:
     std::string readFile(const std::string& filename);
-    std::vector<std::string> tokenize(const std::string& line);
+    std::vector<std::string> tokenize(const std::string& input);
 
     void parseServer(const std::vector<std::string>& tokens, size_t& index);
     void parseLocation(const std::vector<std::string>& tokens, size_t& index, ServerConfig& server);
