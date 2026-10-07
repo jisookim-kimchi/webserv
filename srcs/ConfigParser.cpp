@@ -1,9 +1,56 @@
 #include "../includes/ConfigParser.hpp"
+#include <cctype>
 #include <stdexcept>
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <cstdlib>
+
+namespace {
+
+uint16_t parsePortStrict(const std::string& token) {
+    if (token.empty())
+        throw std::invalid_argument("bad port number: " + token);
+    size_t idx = 0;
+    unsigned long port = 0;
+    try {
+        port = std::stoul(token, &idx, 10);
+    } catch (const std::exception&) {
+        throw std::invalid_argument("bad port number: " + token);
+    }
+    if (idx != token.size() || port > 65535 || port == 0)
+        throw std::invalid_argument("bad port number: " + token);
+    return static_cast<uint16_t>(port);
+}
+
+uint64_t parseBodySizeStrict(const std::string& token) {
+    if (token.empty() || !std::isdigit(static_cast<unsigned char>(token[0])))
+        throw std::invalid_argument("bad client_max_body_size: " + token);
+
+    size_t idx = 0;
+    uint64_t value = 0;
+    try {
+        value = std::stoull(token, &idx, 10);
+    } catch (const std::exception&) {
+        throw std::invalid_argument("bad client_max_body_size: " + token);
+    }
+
+    if (idx == token.size())
+        return value;
+    if (idx + 1 != token.size())
+        throw std::invalid_argument("bad client_max_body_size: " + token);
+
+    const char unit = token[idx];
+    if (unit == 'K' || unit == 'k')
+        return value * 1024ULL;
+    if (unit == 'M' || unit == 'm')
+        return value * 1024ULL * 1024ULL;
+    if (unit == 'G' || unit == 'g')
+        return value * 1024ULL * 1024ULL * 1024ULL;
+    throw std::invalid_argument("bad client_max_body_size: " + token);
+}
+
+}  // namespace
 
 ConfigParser::ConfigParser() {
 }
@@ -53,34 +100,34 @@ std::string ConfigParser::readFile(const std::string& filename) {
 
 /*
     @brief : split string into tokens
-    @param1 : line of config file
+    @param1 : input of config file
     @return : vector of tokens
     @think : '/' case??
 */
-std::vector<std::string> ConfigParser::tokenize(const std::string& line) {
+std::vector<std::string> ConfigParser::tokenize(const std::string& input) {
     std::vector<std::string> tokens;
     std::string token;
-    for (size_t i = 0; i < line.length(); i++) {
-        if (line[i] == '#') {
+    for (size_t i = 0; i < input.length(); i++) {
+        if (input[i] == '#') {
             if (!token.empty()) {
                 tokens.push_back(token);
                 token.clear();
             }
-            while (i < line.length() && line[i] != '\n')
+            while (i < input.length() && input[i] != '\n')
                 i++;
-        } else if (isspace(line[i])) {
+        } else if (isspace(input[i])) {
             if (!token.empty()) {
                 tokens.push_back(token);
                 token.clear();
             }
-        } else if (line[i] == '{' || line[i] == '}' || line[i] == ';') {
+        } else if (input[i] == '{' || input[i] == '}' || input[i] == ';') {
             if (!token.empty()) {
                 tokens.push_back(token);
                 token.clear();
             }
-            tokens.push_back(std::string(1, line[i]));
+            tokens.push_back(std::string(1, input[i]));
         } else {
-            token += line[i];
+            token += input[i];
         }
     }
     if (!token.empty())
@@ -160,11 +207,7 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
         if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
             throw std::invalid_argument("error: 'empty' port number for 'listen'");
         }
-        int port = std::stoi(tokens[index]);
-        if (port > 65535 || port <= 0) {
-            throw std::invalid_argument("bad port number: " + tokens[index]);
-        }
-        server.addPort(static_cast<uint16_t>(port));
+        server.addPort(parsePortStrict(tokens[index]));
         index++;
     } else if (found == "host") {
         index++;
@@ -184,20 +227,7 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
         if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
             throw std::invalid_argument("error: bad argument for 'client_max_body_size'");
         }
-        uint64_t cmbs = 0;
-        try {
-            cmbs = std::stoull(tokens[index]);
-        } catch (...) {
-            throw std::invalid_argument("bad client_max_body_size: " + tokens[index]);
-        }
-        char unit = tokens[index].back();
-        if (unit == 'K' || unit == 'k')
-            cmbs *= 1024ULL;
-        else if (unit == 'M' || unit == 'm')
-            cmbs *= 1024ULL * 1024ULL;
-        else if (unit == 'G' || unit == 'g')
-            cmbs *= 1024ULL * 1024ULL * 1024ULL;
-        server.setClientMaxBodySize(cmbs);
+        server.setClientMaxBodySize(parseBodySizeStrict(tokens[index]));
         index++;
     } else if (found == "error_page") {
         index++;
@@ -301,20 +331,7 @@ void ConfigParser::parseLocationKeyword(const std::vector<std::string>& tokens, 
         if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
             throw std::invalid_argument("error: bad argument for 'client_max_body_size'");
         }
-        uint64_t cmbs = 0;
-        try {
-            cmbs = std::stoull(tokens[index]);
-        } catch (...) {
-            throw std::invalid_argument("bad client_max_body_size: " + tokens[index]);
-        }
-        char unit = tokens[index].back();
-        if (unit == 'K' || unit == 'k')
-            cmbs *= 1024ULL;
-        else if (unit == 'M' || unit == 'm')
-            cmbs *= 1024ULL * 1024ULL;
-        else if (unit == 'G' || unit == 'g')
-            cmbs *= 1024ULL * 1024ULL * 1024ULL;
-        location.setClientMaxBodySize(cmbs);
+        location.setClientMaxBodySize(parseBodySizeStrict(tokens[index]));
         index++;
     }
     else {
