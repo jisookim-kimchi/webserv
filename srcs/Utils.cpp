@@ -58,6 +58,48 @@ std::string headerToCgiEnvKey(const std::string& headerName) {
     return key;
 }
 
+bool hexCharToInt(char c, size_t& digit) {
+    if (c >= '0' && c <= '9') {
+        digit = static_cast<size_t>(c - '0');
+        return true;
+    }
+    const char lower = static_cast<char>(c | 0x20);
+    if (lower >= 'a' && lower <= 'f') {
+        digit = static_cast<size_t>(lower - 'a' + 10);
+        return true;
+    }
+    return false;
+}
+
+bool parseHexSize(const std::string& s, size_t pos, size_t len, size_t& out) {
+    if (len == 0 || pos + len > s.size())
+        return false;
+    out = 0;
+    for (size_t i = 0; i < len; ++i) {
+        size_t digit = 0;
+        if (!hexCharToInt(s[pos + i], digit))
+            return false;
+        out = (out << 4) | digit;
+    }
+    return true;
+}
+
+bool parseHexSize(const std::string& s, size_t& out) {
+    return parseHexSize(s, 0, s.size(), out);
+}
+
+bool parseSizeDecimal(const std::string& s, size_t& out) {
+    if (s.empty())
+        return false;
+    out = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(s[i])))
+            return false;
+        out = out * 10 + static_cast<size_t>(s[i] - '0');
+    }
+    return true;
+}
+
 void setNonBlocking(int fd) {
     if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
         throw std::runtime_error(std::string("fcntl(O_NONBLOCK) failed: ") + std::strerror(errno));
