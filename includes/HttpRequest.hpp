@@ -4,7 +4,7 @@
 #include <map>
 #include "Utils.hpp"
 
-enum class HTTP_METHOD : unsigned int
+enum class HttpMethod : unsigned int
 {
     UNKNOWN = 0,
     GET     = 1 << 0,
@@ -18,17 +18,17 @@ enum class HTTP_METHOD : unsigned int
     CONNECT = 1 << 8
 };
 
-class HTTP_Request
+class HttpRequest
 {
 public:
-    HTTP_Request() : method_(HTTP_METHOD::UNKNOWN){}
-    ~HTTP_Request() = default;
-    HTTP_Request(const HTTP_Request& other) = default;
+    HttpRequest() : method_(HttpMethod::UNKNOWN){}
+    ~HttpRequest() = default;
+    HttpRequest(const HttpRequest& other) = default;
     bool parse(const std::string& buffer);
     /*
         Getter
     */
-    HTTP_METHOD getMethod() const {return method_;}
+    HttpMethod getMethod() const {return method_;}
     std::string getMethodString() const;
     const std::string& getPath() const { return path_; }
     const std::string& getQueryString() const { return queryString_; }
@@ -38,13 +38,13 @@ public:
     const std::map<std::string, std::string>& getHeaders() const { return headers_; }
 
 private:
-    HTTP_Request& operator=(const HTTP_Request& other) = default;
+    HttpRequest& operator=(const HttpRequest& other) = default;
 
     bool parseRequestLine(const std::string& buffer, size_t& headerStart);
     bool parseHeaders(const std::string& buffer, size_t headerStart, size_t headerEnd);
     bool parseBody(const std::string& buffer, size_t headerEnd);
 
-    HTTP_METHOD method_;
+    HttpMethod method_;
     std::string uri_;
     std::string version_;
     std::string path_;

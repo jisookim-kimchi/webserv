@@ -1,4 +1,4 @@
-#include "../includes/HTTP_Request.hpp"
+#include "../includes/HttpRequest.hpp"
 #include "test_utils.hpp"
 #include <iostream>
 #include <sstream>
@@ -12,7 +12,7 @@ void test_get() {
         "Host: localhost:8080\r\n"
         "\r\n";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getMethodString(), "GET");
     EXPECT_EQ(req.getPath(), "/index.html");
@@ -26,7 +26,7 @@ void test_query() {
         "Host: example.com\r\n"
         "\r\n";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getPath(), "/jisookim");
     EXPECT_EQ(req.getQueryString(), "test=4242%heilbronn");
@@ -41,7 +41,7 @@ void test_post() {
         "\r\n"
         "hello world";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getMethodString(), "POST");
     EXPECT_EQ(req.getBody(), "hello world");
@@ -56,7 +56,7 @@ void test_headers() {
         "User-Agent:    curl/7.68.0\r\n"
         "\r\n";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getHeader("host"), "localhost:8080");
     EXPECT_EQ(req.getHeader("user-agent"), "curl/7.68.0");
@@ -68,7 +68,7 @@ void test_no_host() {
         "User-Agent: curl/7.68.0\r\n"
         "\r\n";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(!req.parse(raw));
 }
 
@@ -79,7 +79,7 @@ void test_dup_host() {
         "Host: second.com\r\n"
         "\r\n";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(!req.parse(raw));
 }
 
@@ -89,7 +89,7 @@ void test_bad_method() {
         "Host: localhost:8080\r\n"
         "\r\n";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(!req.parse(raw));
 }
 
@@ -99,7 +99,7 @@ void test_bad_version() {
         "Host: localhost:8080\r\n"
         "\r\n";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(!req.parse(raw));
 }
 
@@ -117,7 +117,7 @@ void test_chunked() {
         "0\r\n"
         "\r\n";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getBody(), "Hello World"); 
 }
@@ -129,7 +129,7 @@ void test_url_decode() {
         "Host: localhost:8080\r\n"
         "\r\n";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getPath(), "/my folder/file+test.html"); 
 }
@@ -143,7 +143,7 @@ void test_len_mismatch() {
         "\r\n"
         "hello";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(!req.parse(raw));
 }
 
@@ -156,7 +156,7 @@ void test_bad_len() {
         "\r\n"
         "hello";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(!req.parse(raw));
 }
 
@@ -170,7 +170,7 @@ void test_len_and_chunked() {
         "\r\n"
         "5\r\nhello\r\n0\r\n\r\n";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(!req.parse(raw));
 }
 void test_complex_chunked()
@@ -189,7 +189,7 @@ void test_complex_chunked()
         "FINAL\r\n"
         "0\r\n"
         "\r\n";
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getBody(), "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFINAL");
     EXPECT_EQ(req.getBody().size(), 46UL);
@@ -202,7 +202,7 @@ void test_complex_uri_and_query() {
         "Accept: text/html,application/xhtml+xml\r\n"
         "\r\n";
 
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getPath(), "/api/v1/user/profile/special!@#");
     EXPECT_EQ(req.getQueryString(), "name=jisoo%20kim&age=42&sort=asc%26desc");
@@ -218,7 +218,7 @@ void test_large_body() {
         << "Content-Length: " << payload.size() << "\r\n"
         << "\r\n"
         << payload;
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(oss.str()));
     EXPECT_EQ(req.getBody().size(), payload.size());
     EXPECT_EQ(req.getBody()[0], 'A');
@@ -231,7 +231,7 @@ void test_many_headers() {
     for (int i = 0; i < 200; ++i)
         oss << "X-Custom-" << i << ": value-" << i << "\r\n";
     oss << "\r\n";
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(oss.str()));
     EXPECT_EQ(req.getHeader("x-custom-0"), "value-0");
     EXPECT_EQ(req.getHeader("x-custom-199"), "value-199");
@@ -244,7 +244,7 @@ void test_empty_header_value() {
         "Host: localhost\r\n"
         "X-Empty:\r\n"
         "\r\n";
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getHeader("x-empty"), "");
 }
@@ -255,7 +255,7 @@ void test_crlf_only_after_headers_zero_cl() {
         "Host: localhost\r\n"
         "Content-Length: 0\r\n"
         "\r\n";
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getBody(), "");
 }
@@ -265,7 +265,7 @@ void test_bad_percent_encoding() {
         "GET /bad%zz HTTP/1.1\r\n"
         "Host: localhost\r\n"
         "\r\n";
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(!req.parse(raw));
 }
 
@@ -274,7 +274,7 @@ void test_incomplete_percent() {
         "GET /bad%2 HTTP/1.1\r\n"
         "Host: localhost\r\n"
         "\r\n";
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(!req.parse(raw));
 }
 
@@ -283,7 +283,7 @@ void test_path_must_start_with_slash() {
         "GET index.html HTTP/1.1\r\n"
         "Host: localhost\r\n"
         "\r\n";
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(!req.parse(raw));
 }
 
@@ -295,7 +295,7 @@ void test_chunked_incomplete() {
         "\r\n"
         "5\r\n"
         "Hel";
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(!req.parse(raw));
 }
 
@@ -309,7 +309,7 @@ void test_chunked_bad_size() {
         "nope\r\n"
         "0\r\n"
         "\r\n";
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(!req.parse(raw));
 }
 
@@ -319,7 +319,7 @@ void test_tab_folded_spacing_in_headers() {
         "Host:\t\tlocalhost\t\r\n"
         "X-Data:    spaced   value\r\n"
         "\r\n";
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getHeader("host"), "localhost\t");
     EXPECT_EQ(req.getHeader("x-data"), "spaced   value");
@@ -331,7 +331,7 @@ void test_long_query_string() {
         "GET /search?" + q + " HTTP/1.1\r\n"
         "Host: localhost\r\n"
         "\r\n";
-    HTTP_Request req;
+    HttpRequest req;
     EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getQueryString().size(), 8000UL);
 }
@@ -368,7 +368,7 @@ int main() {
     failed += runTest("test_tab_folded_spacing_in_headers", &test_tab_folded_spacing_in_headers);
     failed += runTest("test_long_query_string", &test_long_query_string);
     if (failed == 0) {
-        std::cout << "\n All HTTP_Request tests passed!\n";
+        std::cout << "\n All HttpRequest tests passed!\n";
     } else {
         std::cout << "\n" << failed << " tests failed\n";
     }

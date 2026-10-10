@@ -1,6 +1,6 @@
 #include "../includes/Server.hpp"
 
-#include "../includes/HTTP_Request.hpp"
+#include "../includes/HttpRequest.hpp"
 #include "../includes/HttpResponse.hpp"
 #include "../includes/Utils.hpp"
 
@@ -49,39 +49,6 @@ std::string headerValue(const std::string& headersBlock, const std::string& keyL
     return "";
 }
 
-bool parseSizeDecimal(const std::string& s, size_t& out) {
-    if (s.empty())
-        return false;
-    out = 0;
-    for (size_t i = 0; i < s.size(); ++i) {
-        if (!std::isdigit(static_cast<unsigned char>(s[i])))
-            return false;
-        out = out * 10 + static_cast<size_t>(s[i] - '0');
-    }
-    return true;
-}
-
-bool parseHexSize(const std::string& s, size_t& out) {
-    if (s.empty())
-        return false;
-    out = 0;
-    for (size_t i = 0; i < s.size(); ++i) {
-        char c = s[i];
-        size_t digit = 0;
-        if (c >= '0' && c <= '9')
-            digit = static_cast<size_t>(c - '0');
-        else {
-            char lower = static_cast<char>(c | 0x20);
-            if (lower >= 'a' && lower <= 'f')
-                digit = static_cast<size_t>(lower - 'a' + 10);
-            else
-                return false;
-        }
-        out = (out << 4) | digit;
-    }
-    return true;
-}
-
 bool isRequestComplete(const std::string& buf) {
     const size_t headerEnd = buf.find("\r\n\r\n");
     if (headerEnd == std::string::npos)
@@ -103,7 +70,7 @@ bool isRequestComplete(const std::string& buf) {
             if (rn == std::string::npos)
                 return false;
             size_t chunkSize = 0;
-            if (!parseHexSize(buf.substr(pos, rn - pos), chunkSize))
+            if (!Utils::parseHexSize(buf.substr(pos, rn - pos), chunkSize))
                 return true;
             if (chunkSize == 0)
                 return rn + 4 <= buf.size();
@@ -117,7 +84,7 @@ bool isRequestComplete(const std::string& buf) {
 
     if (!cl.empty()) {
         size_t expected = 0;
-        if (!parseSizeDecimal(cl, expected))
+        if (!Utils::parseSizeDecimal(cl, expected))
             return true;
         return buf.size() >= bodyStart + expected;
     }
@@ -357,7 +324,7 @@ void Server::handleClientRead(int clientFd, int epollFd,
 }
 
 void Server::processRequest(Client& client, int epollFd) {
-    HTTP_Request req;
+    HttpRequest req;
     if (req.parse(client.getRequestBuffer())) {
         const ServerConfig& config = findServerConfig(client, req);
         HttpResponse::RequestView view;
@@ -387,7 +354,7 @@ void Server::processRequest(Client& client, int epollFd) {
     armClientWrite(client, epollFd);
 }
 
-const ServerConfig& Server::findServerConfig(const Client& client, const HTTP_Request& req) const {
+const ServerConfig& Server::findServerConfig(const Client& client, const HttpRequest& req) const {
     int clientPort = client.getServerPort();
     std::string hostHeader = req.getHeader("host");
     size_t colon = hostHeader.find(':');
@@ -414,7 +381,7 @@ const ServerConfig& Server::findServerConfig(const Client& client, const HTTP_Re
     return defaultServer ? *defaultServer : serverConfigs_[0];
 }
 
-CgiHandler::Request Server::createCgiRequest(Client& client, const HTTP_Request& req,
+CgiHandler::Request Server::createCgiRequest(Client& client, const HttpRequest& req,
                                              const LocationConfig* loc) const {
     CgiHandler::Request cgiReq;
     const ServerConfig& config = findServerConfig(client, req);
@@ -506,7 +473,7 @@ void Server::finishCgi(Client& client, int epollFd) {
     armClientWrite(client, epollFd);
 }
 
-void Server::handleCgi(Client& client, const HTTP_Request& req, const LocationConfig* loc,
+void Server::handleCgi(Client& client, const HttpRequest& req, const LocationConfig* loc,
                        int epollFd) {
     const ServerConfig& config = findServerConfig(client, req);
     try {
