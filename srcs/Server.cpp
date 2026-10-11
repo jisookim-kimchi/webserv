@@ -7,7 +7,6 @@
 #include <arpa/inet.h>
 #include <cctype>
 #include <cerrno>
-#include <fcntl.h>
 #include <netinet/tcp.h>
 #include <poll.h>
 #include <stdexcept>
@@ -71,7 +70,7 @@ bool isRequestComplete(const std::string& buf) {
             if (rn == std::string::npos)
                 return false;
             size_t chunkSize = 0;
-            if (!Utils::parseHexSize(buf.substr(pos, rn - pos), chunkSize))
+            if (!Utils::parseHexSize(buf, pos, rn - pos, chunkSize))
                 return true;
             if (chunkSize == 0)
                 return rn + 4 <= buf.size();
@@ -99,9 +98,12 @@ std::string resolveScriptPath(const HttpResponse& mapper, const ServerConfig& se
     if (!fs.empty())
         return fs;
     const LocationConfig* rooted = LocationMatch::matchPrefixWithRoot(urlPath, server);
-    if (rooted == nullptr)
-        return "";
-    return mapper.mapUrlToFs(*rooted, urlPath);
+    if (rooted != nullptr) {
+        fs = mapper.mapUrlToFs(*rooted, urlPath);
+        if (!fs.empty())
+            return fs;
+    }
+    return loc.getCgiPass();
 }
 
 uint32_t pollToEpoll(short pevents) {
@@ -262,7 +264,9 @@ void Server::handleNewConnection(int listenFd, int epollFd) {
     if (clientFd == -1)
         return;
 
-    if (fcntl(clientFd, F_SETFL, O_NONBLOCK) == -1) {
+    try {
+        Utils::setNonBlocking(clientFd);
+    } catch (const std::exception&) {
         close(clientFd);
         return;
     }
@@ -333,6 +337,7 @@ void Server::handleClientRead(int clientFd, int epollFd,
 void Server::processRequest(Client& client, int epollFd) {
     HttpRequest req;
     if (req.parse(client.getRequestBuffer())) {
+        client.getRequestBuffer().clear();
         const ServerConfig& config = findServerConfig(client, req);
         HttpResponse::RequestView view;
         view.method = req.getMethodString();
@@ -361,34 +366,37 @@ void Server::processRequest(Client& client, int epollFd) {
     armClientWrite(client, epollFd);
 }
 
-const ServerConfig& Server::findServerConfig(const Client& client, const HttpRequest& req) const {
-    int clientPort = client.getServerPort();
-    std::string hostHeader = req.getHeader("host");
+const ServerConfig* Server::selectServerConfig(int port, const std::string& hostHeader) const {
     size_t colon = hostHeader.find(':');
     size_t hostNameLen = (colon != std::string::npos) ? colon : hostHeader.length();
     const ServerConfig* defaultServer = nullptr;
     for (const auto& config : serverConfigs_) {
-        const auto& ports = config.getPort();
         bool portMatch = false;
-        for (uint16_t p : ports) {
-            if (p == clientPort) {
+        for (uint16_t p : config.getPort()) {
+            if (p == port) {
                 portMatch = true;
                 break;
             }
         }
         if (!portMatch)
             continue;
-        if (!defaultServer)
+        if (defaultServer == nullptr)
             defaultServer = &config;
         for (const auto& name : config.getServerName()) {
             if (name.length() == hostNameLen && hostHeader.compare(0, hostNameLen, name) == 0)
-                return config;
+                return &config;
         }
     }
-    return defaultServer ? *defaultServer : serverConfigs_[0];
+    return defaultServer;
 }
 
-CgiHandler::Request Server::createCgiRequest(Client& client, const HttpRequest& req,
+const ServerConfig& Server::findServerConfig(const Client& client, const HttpRequest& req) const {
+    const ServerConfig* selected =
+        selectServerConfig(client.getServerPort(), req.getHeader("host"));
+    return selected != nullptr ? *selected : serverConfigs_[0];
+}
+
+CgiHandler::Request Server::createCgiRequest(Client& client, HttpRequest& req,
                                              const LocationConfig* loc) const {
     CgiHandler::Request cgiReq;
     const ServerConfig& config = findServerConfig(client, req);
@@ -396,11 +404,10 @@ CgiHandler::Request Server::createCgiRequest(Client& client, const HttpRequest& 
     if (loc != nullptr) {
         cgiReq.interpreterPath = loc->getCgiPass();
         HttpResponse mapper;
-        const std::string scriptPath = resolveScriptPath(mapper, config, *loc, req.getPath());
-        cgiReq.scriptPath = scriptPath;
+        cgiReq.scriptPath = resolveScriptPath(mapper, config, *loc, req.getPath());
         cgiReq.documentRoot =
-            loc->getRoot().empty() ? Utils::dirName(scriptPath) : loc->getRoot();
-        cgiReq.workingDirectory = Utils::dirName(scriptPath);
+            loc->getRoot().empty() ? Utils::dirName(cgiReq.scriptPath) : loc->getRoot();
+        cgiReq.workingDirectory = Utils::dirName(cgiReq.scriptPath);
     }
 
     cgiReq.requestMethod = req.getMethodString();
@@ -409,7 +416,7 @@ CgiHandler::Request Server::createCgiRequest(Client& client, const HttpRequest& 
         cgiReq.requestUri += "?" + req.getQueryString();
     cgiReq.queryString = req.getQueryString();
     cgiReq.contentType = req.getHeader("content-type");
-    cgiReq.requestBody = req.getBody();
+    cgiReq.requestBody = std::move(req.getBody());
     cgiReq.headers = req.getHeaders();
     cgiReq.scriptName = req.getPath();
     cgiReq.pathInfo = req.getPath();
@@ -480,7 +487,7 @@ void Server::finishCgi(Client& client, int epollFd) {
     armClientWrite(client, epollFd);
 }
 
-void Server::handleCgi(Client& client, const HttpRequest& req, const LocationConfig* loc,
+void Server::handleCgi(Client& client, HttpRequest& req, const LocationConfig* loc,
                        int epollFd) {
     const ServerConfig& config = findServerConfig(client, req);
     try {
@@ -546,7 +553,8 @@ void Server::checkCgiTimeouts(int epollFd) {
 void Server::checkIdleClients(int epollFd) {
     const time_t now = std::time(nullptr);
     for (auto it = clients_.begin(); it != clients_.end();) {
-        if (it->second->getState() == ClientState::CGI_RUNNING) {
+        const ClientState state = it->second->getState();
+        if (state == ClientState::READING_REQUEST || state == ClientState::CGI_RUNNING) {
             ++it;
             continue;
         }
