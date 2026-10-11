@@ -87,4 +87,5 @@ class HttpResponse {
     std::string body_;
     std::string raw_;
     bool needsCgi_ = false;
+    bool omitBody_ = false;
 };

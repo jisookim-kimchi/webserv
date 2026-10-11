@@ -91,6 +91,12 @@ int main() {
     response.buildForPath(req("POST", "/"), server);
     expect(response.statusCode() == 405, "405");
 
+    response.buildForPath(req("HEAD", "/"), server);
+    expect(response.statusCode() == 405, "HEAD 405 when not allowed");
+    expect(response.getRaw().find("\r\n\r\n") != std::string::npos &&
+               response.getRaw().find("\r\n\r\n") + 4 == response.getRaw().size(),
+           "HEAD omits body");
+
     response.buildForPath(req("GET", "/", std::string(2048, 'x')), server);
     expect(response.statusCode() == 413, "413");
 

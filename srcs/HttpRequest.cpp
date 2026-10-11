@@ -29,6 +29,8 @@ std::string HttpRequest::getMethodString() const
             return "DELETE";
         case HttpMethod::PUT:
             return "PUT";
+        case HttpMethod::HEAD:
+            return "HEAD";
         default:
             return "UNKNOWN";
     }
@@ -50,6 +52,8 @@ static HttpMethod parseMethod(const std::string &buffer, size_t len)
         return HttpMethod::DELETE;
     if (buffer.compare(0, len, "PUT") == 0)
         return HttpMethod::PUT;
+    if (buffer.compare(0, len, "HEAD") == 0)
+        return HttpMethod::HEAD;
     return HttpMethod::UNKNOWN;
 }
 

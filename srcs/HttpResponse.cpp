@@ -141,6 +141,7 @@ void HttpResponse::reset() {
     body_.clear();
     raw_.clear();
     needsCgi_ = false;
+    omitBody_ = false;
 }
 
 std::string HttpResponse::statusText(int code) {
@@ -177,6 +178,7 @@ std::string HttpResponse::statusText(int code) {
 bool HttpResponse::buildForPath(const RequestView& request, const ServerConfig& server) {
     const LocationConfig* loc = LocationMatch::match(request.path, request.method, server);
     if (loc == nullptr) {
+        omitBody_ = (request.method == "HEAD");
         setError(404, server, nullptr);
         return false;
     }
@@ -187,6 +189,7 @@ bool HttpResponse::buildForPath(const RequestView& request, const ServerConfig& 
 void HttpResponse::build(const RequestView& request, const ServerConfig& server,
                          const LocationConfig& location) {
     reset();
+    omitBody_ = (request.method == "HEAD");
 
     if (request.errorStatus != 0) {
         setError(request.errorStatus, server, &location);
@@ -425,7 +428,9 @@ void HttpResponse::finalize() {
     for (const auto& h : headers_) {
         oss << h.first << ": " << h.second << "\r\n";
     }
-    oss << "\r\n" << body_;
+    oss << "\r\n";
+    if (!omitBody_)
+        oss << body_;
     raw_ = oss.str();
 }
 
