@@ -54,7 +54,7 @@ On macOS, full server Valgrind is unavailable (no `epoll`); use Codespace/CI for
 ## Unit tests
 
 ```bash
-./test.sh all
+./scripts/test.sh all
 ```
 
 ## Notes for defense
