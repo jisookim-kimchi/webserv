@@ -33,7 +33,7 @@ so we can use std::move for transferring ownership.
 - Fix : Wrapped CGI output with standard HTTP/1.1 status line (`HTTP/1.1 200 OK`) and `Content-Length` header to resolve the `HTTP/0.9` error.
 
 5. Empty response after request parse
-- Issue : after `HTTP_Request::parse` succeeded, `setResponseBuffer` was still commented / TODO, but the loop already switched the client to `EPOLLOUT`.
+- Issue : after `HttpRequest::parse` succeeded, `setResponseBuffer` was still commented / TODO, but the loop already switched the client to `EPOLLOUT`.
   `curl` got an empty body (or nothing useful) even though the server accepted the connection.
 
 6. Incomplete body treated as a finished request

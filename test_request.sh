@@ -4,9 +4,9 @@ set -e
 mkdir -p build
 
 c++ -std=c++17 -Wall -Wextra -Werror -Iincludes -Itests \
-    srcs/HTTP_request.cpp \
+    srcs/HttpRequest.cpp \
     srcs/Utils.cpp \
-    tests/test_HTTP_request.cpp \
+    tests/test_http_request.cpp \
     -o build/test_req
 
 ./build/test_req

@@ -29,8 +29,8 @@ build_cgi() {
 build_http_request() {
   echo "[build] test_http_request"
   "$CXX" "${CXXFLAGS[@]}" \
-    tests/test_HTTP_request.cpp \
-    srcs/HTTP_request.cpp \
+    tests/test_http_request.cpp \
+    srcs/HttpRequest.cpp \
     -o build/test_http_request
 }
 
