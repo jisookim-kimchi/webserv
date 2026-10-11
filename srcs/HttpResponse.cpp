@@ -283,7 +283,7 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
             setAutoindex(fsPath, path);
             return;
         }
-        setError(403, server, &location);
+        setError(404, server, &location);
         return;
     }
 
