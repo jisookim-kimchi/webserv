@@ -1,9 +1,11 @@
 #include "../includes/ConfigParser.hpp"
 #include "../includes/Server.hpp"
+#include <csignal>
 #include <iostream>
 
 int main(int argc, char** argv)
 {
+    std::signal(SIGPIPE, SIG_IGN);
     std::string configPath;
     if (argc == 2)
         configPath = argv[1];

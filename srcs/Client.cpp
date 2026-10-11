@@ -66,8 +66,8 @@ std::string& Client::getResponseBuffer() {
     return responseBuffer_;
 }
 
-void Client::setResponseBuffer(const std::string& response) {
-    responseBuffer_ = response;
+void Client::setResponseBuffer(std::string response) {
+    responseBuffer_ = std::move(response);
     offset_ = 0;
     updateLastActiveTime();
 }

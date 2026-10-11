@@ -128,6 +128,8 @@ void CgiHandler::closeStdin() {
         close(stdinFd_);
         stdinFd_ = -1;
     }
+    body_.clear();
+    bodyOffset_ = 0;
 }
 
 void CgiHandler::closeStdout() {
@@ -216,18 +218,20 @@ short CgiHandler::stdoutEvents() const {
 }
 
 void CgiHandler::validate(const Request& request) const {
-    if (request.scriptPath.empty())
-        throw std::runtime_error("CGI script path is empty");
-    if (!Utils::isReadableFile(request.scriptPath))
-        throw std::runtime_error("CGI script is not readable: " + request.scriptPath);
-
     if (!request.interpreterPath.empty()) {
         if (!Utils::isExecutableFile(request.interpreterPath) &&
             !Utils::isReadableFile(request.interpreterPath))
             throw std::runtime_error("CGI interpreter is not usable: " + request.interpreterPath);
-    } else if (!Utils::isExecutableFile(request.scriptPath)) {
-        throw std::runtime_error("CGI script is not executable: " + request.scriptPath);
+        if (request.scriptPath == request.interpreterPath)
+            return;
+        if (request.scriptPath.empty() || !Utils::isReadableFile(request.scriptPath))
+            throw std::runtime_error("CGI script is not readable: " + request.scriptPath);
+        return;
     }
+    if (request.scriptPath.empty())
+        throw std::runtime_error("CGI script path is empty");
+    if (!Utils::isExecutableFile(request.scriptPath))
+        throw std::runtime_error("CGI script is not executable: " + request.scriptPath);
 }
 
 void CgiHandler::spawnChild(const Request& request, int stdinRead, int stdinWrite, int stdoutRead,
@@ -275,7 +279,7 @@ void CgiHandler::spawnChild(const Request& request, int stdinRead, int stdinWrit
     _exit(127);
 }
 
-void CgiHandler::launch(const Request& request, int timeoutMs) {
+void CgiHandler::launch(Request request, int timeoutMs) {
     reset();
     validate(request);
 
@@ -310,7 +314,7 @@ void CgiHandler::launch(const Request& request, int timeoutMs) {
     Utils::setNonBlocking(stdoutRead.get());
 
     pid_ = pid;
-    body_ = request.requestBody;
+    body_ = std::move(request.requestBody);
     bodyOffset_ = 0;
     rawOutput_.clear();
     result_ = Result{};
