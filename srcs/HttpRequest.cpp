@@ -27,18 +27,8 @@ std::string HttpRequest::getMethodString() const
             return "POST";
         case HttpMethod::DELETE:
             return "DELETE";
-        case HttpMethod::HEAD:
-            return "HEAD";
         case HttpMethod::PUT:
             return "PUT";
-        case HttpMethod::PATCH:
-            return "PATCH";
-        case HttpMethod::OPTIONS:
-            return "OPTIONS";
-        case HttpMethod::TRACE:
-            return "TRACE";
-        case HttpMethod::CONNECT:
-            return "CONNECT";
         default:
             return "UNKNOWN";
     }
@@ -54,24 +44,13 @@ static HttpMethod parseMethod(const std::string &buffer, size_t len)
 {
     if (buffer.compare(0, len, "GET") == 0)
         return HttpMethod::GET;
-    else if (buffer.compare(0, len, "POST") == 0)
+    if (buffer.compare(0, len, "POST") == 0)
         return HttpMethod::POST;
-    else if (buffer.compare(0, len, "DELETE") == 0)
+    if (buffer.compare(0, len, "DELETE") == 0)
         return HttpMethod::DELETE;
-    else if (buffer.compare(0, len, "HEAD") == 0)
-        return HttpMethod::HEAD;
-    else if (buffer.compare(0, len, "PUT") == 0)
+    if (buffer.compare(0, len, "PUT") == 0)
         return HttpMethod::PUT;
-    else if (buffer.compare(0, len, "PATCH") == 0)
-        return HttpMethod::PATCH;
-    else if (buffer.compare(0, len, "OPTIONS") == 0)
-        return HttpMethod::OPTIONS;
-    else if (buffer.compare(0, len, "TRACE") == 0)
-        return HttpMethod::TRACE;
-    else if (buffer.compare(0, len, "CONNECT") == 0)
-        return HttpMethod::CONNECT;
-    else
-        return HttpMethod::UNKNOWN;
+    return HttpMethod::UNKNOWN;
 }
 
 /**
@@ -172,11 +151,7 @@ bool HttpRequest::parseHeaders(const std::string &buffer, size_t headerStart, si
             return false;
 
         key = Utils::toLower(buffer.substr(headerStart, colon - headerStart));
-        size_t valStart = colon + 1;
-        while (valStart < rn && (buffer[valStart] == ' ' || buffer[valStart] == '\t'))
-            valStart++;
-        size_t valLen = rn - valStart;
-        val.assign(buffer, valStart, valLen);
+        val = Utils::trimLeft(buffer.substr(colon + 1, rn - (colon + 1)));
         if(key == "host")
         {
             if (hasHost)
@@ -220,7 +195,6 @@ bool HttpRequest::parseBody(const std::string &buffer, size_t headerEnd)
                 return false;
             if (chunkSize == 0)
             {
-                // Need final CRLF after the 0-size chunk line (`0\r\n\r\n`).
                 if (rn + 4 > buffer.size())
                     return false;
                 return true;
@@ -246,7 +220,6 @@ bool HttpRequest::parseBody(const std::string &buffer, size_t headerEnd)
         return true;
     }
 
-    // No Content-Length and not chunked: empty body (do not swallow trailing bytes).
     body_.clear();
     return true;
 }

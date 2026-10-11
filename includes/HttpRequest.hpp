@@ -10,12 +10,7 @@ enum class HttpMethod : unsigned int
     GET     = 1 << 0,
     POST    = 1 << 1,
     DELETE  = 1 << 2,
-    HEAD    = 1 << 3,
-    PUT     = 1 << 4,
-    PATCH   = 1 << 5,
-    OPTIONS = 1 << 6,
-    TRACE   = 1 << 7,
-    CONNECT = 1 << 8
+    PUT     = 1 << 3
 };
 
 class HttpRequest
@@ -34,6 +29,7 @@ public:
     const std::string& getQueryString() const { return queryString_; }
     const std::string& getVersion() const { return version_; }
     const std::string& getBody() const { return body_; }
+    std::string& getBody() { return body_; }
     std::string getHeader(const std::string& key) const;
     const std::map<std::string, std::string>& getHeaders() const { return headers_; }
 
