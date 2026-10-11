@@ -1,4 +1,5 @@
 #include "../includes/ListenSocket.hpp"
+#include "../includes/Utils.hpp"
 
 /*
     @brief Socket create
@@ -29,8 +30,11 @@ void ListenSocket::setSocketOption() {
     @throws std::runtime_error if fcntl fails
 */
 void ListenSocket::setNonBlocking() {
-    if (::fcntl(fd_, F_SETFL, O_NONBLOCK) < 0)
+    try {
+        Utils::setNonBlocking(fd_);
+    } catch (const std::exception&) {
         throw std::runtime_error("Error : ListenSocket::setNonBlocking()");
+    }
 }
 
 /*
@@ -40,13 +44,31 @@ void ListenSocket::setNonBlocking() {
 */
 void ListenSocket::bind(int port, const std::string& host) {
     port_ = port;
-    addr_.sin_family = AF_INET;
-    if (host.empty() || host == DEFAULT_HOST)
-        addr_.sin_addr.s_addr = htonl(INADDR_ANY);
-    else
-        addr_.sin_addr.s_addr = inet_addr(host.c_str());
-    addr_.sin_port = htons(port_);
-    if (::bind(fd_, (struct sockaddr*)&addr_, sizeof(addr_)) < 0)
+
+    struct addrinfo hints = {};
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    const char* node = (host.empty() || host == DEFAULT_HOST) ? nullptr : host.c_str();
+    const std::string service = std::to_string(port_);
+    struct addrinfo* result = nullptr;
+    const int gai = ::getaddrinfo(node, service.c_str(), &hints, &result);
+    if (gai != 0 || result == nullptr) {
+        throw std::runtime_error(std::string("Error : ListenSocket::bind(): ") +
+                                 ::gai_strerror(gai));
+    }
+
+    if (result->ai_addr == nullptr || result->ai_addrlen < sizeof(sockaddr_in)) {
+        ::freeaddrinfo(result);
+        throw std::runtime_error("Error : ListenSocket::bind()");
+    }
+
+    addr_ = *reinterpret_cast<sockaddr_in*>(result->ai_addr);
+    ::freeaddrinfo(result);
+
+    if (::bind(fd_, reinterpret_cast<struct sockaddr*>(&addr_), sizeof(addr_)) < 0)
         throw std::runtime_error("Error : ListenSocket::bind()");
 }
 
