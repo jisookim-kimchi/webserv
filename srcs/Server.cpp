@@ -20,6 +20,7 @@
 constexpr int MAX_EVENTS = 256;
 constexpr size_t BUF_SIZE = 65536;
 constexpr int CGI_POLL_TIMEOUT_MS = 200;
+constexpr int CGI_EXECUTION_TIMEOUT_MS = 60000;
 constexpr int IDLE_POLL_TIMEOUT_MS = 1000;
 constexpr time_t CLIENT_IDLE_TIMEOUT_SEC = 60;
 
@@ -231,9 +232,15 @@ void Server::run() {
             if (it == clients_.end())
                 continue;
 
-            if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
+            if (events[i].events & (EPOLLERR | EPOLLHUP)) {
                 closeClient(it, epollFd);
                 continue;
+            }
+            if (events[i].events & EPOLLRDHUP) {
+                if (it->second->getState() == ClientState::READING_REQUEST) {
+                    closeClient(it, epollFd);
+                    continue;
+                }
             }
             if (events[i].events & EPOLLIN)
                 handleClientRead(eventFd, epollFd, it);
@@ -478,12 +485,12 @@ void Server::handleCgi(Client& client, const HttpRequest& req, const LocationCon
     const ServerConfig& config = findServerConfig(client, req);
     try {
         client.setCgi(std::make_unique<CgiHandler>());
-        client.cgi()->launch(createCgiRequest(client, req, loc));
+        client.cgi()->launch(createCgiRequest(client, req, loc), CGI_EXECUTION_TIMEOUT_MS);
         client.setState(ClientState::CGI_RUNNING);
         syncCgiEpoll(client, epollFd);
 
         struct epoll_event ev {};
-        ev.events = EPOLLIN | EPOLLRDHUP;
+        ev.events = EPOLLERR | EPOLLHUP;
         ev.data.fd = client.getFd();
         epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
 
@@ -539,6 +546,10 @@ void Server::checkCgiTimeouts(int epollFd) {
 void Server::checkIdleClients(int epollFd) {
     const time_t now = std::time(nullptr);
     for (auto it = clients_.begin(); it != clients_.end();) {
+        if (it->second->getState() == ClientState::CGI_RUNNING) {
+            ++it;
+            continue;
+        }
         if (now - it->second->getLastActiveTime() > CLIENT_IDLE_TIMEOUT_SEC) {
             auto next = it;
             ++next;

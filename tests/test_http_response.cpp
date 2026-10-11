@@ -55,6 +55,12 @@ ServerConfig makeServer(const std::string& root) {
     cgi.addAllowMethods("GET");
     server.addLocation(cgi);
 
+    LocationConfig noIndex;
+    noIndex.setPath("/no-index");
+    noIndex.setRoot(root + "/empty");
+    noIndex.addAllowMethods("GET");
+    server.addLocation(noIndex);
+
     return server;
 }
 
@@ -99,6 +105,9 @@ int main() {
     response.buildForPath(req("GET", "/empty/"), server);
     expect(response.statusCode() == 200, "autoindex");
     expect(response.getBody().find("Index of") != std::string::npos, "autoindex html");
+
+    response.buildForPath(req("GET", "/no-index"), server);
+    expect(response.statusCode() == 404, "directory without index or autoindex is 404");
 
     const std::string doomed = root + "/upload/to_delete.txt";
     {
