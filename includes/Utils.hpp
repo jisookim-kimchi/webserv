@@ -10,6 +10,12 @@ std::string joinPath(const std::string& left, const std::string& right);
 std::string dirName(const std::string& path);
 std::string headerToCgiEnvKey(const std::string& headerName);
 
+// Strict numeric parsers: entire token must be valid (no trailing junk).
+bool hexCharToInt(char c, size_t& digit);
+bool parseHexSize(const std::string& s, size_t& out);
+bool parseHexSize(const std::string& s, size_t pos, size_t len, size_t& out);
+bool parseSizeDecimal(const std::string& s, size_t& out);
+
 void setNonBlocking(int fd);
 bool isReadableFile(const std::string& path);
 bool isExecutableFile(const std::string& path);

@@ -10,7 +10,7 @@
 #include <sys/epoll.h>
 #include <vector>
 
-class HTTP_Request;
+class HttpRequest;
 
 class Server {
    public:
@@ -40,14 +40,14 @@ class Server {
                            std::map<int, std::unique_ptr<Client>>::iterator it);
     void processRequest(Client& client, int epollFd);
 
-    void handleCgi(Client& client, const HTTP_Request& req, const LocationConfig* loc, int epollFd);
+    void handleCgi(Client& client, const HttpRequest& req, const LocationConfig* loc, int epollFd);
     void handleCgiPipeEvent(int pipeFd, uint32_t events, int epollFd);
     void syncCgiEpoll(Client& client, int epollFd);
     void finishCgi(Client& client, int epollFd);
     void checkCgiTimeouts(int epollFd);
     void checkIdleClients(int epollFd);
 
-    const ServerConfig& findServerConfig(const Client& client, const HTTP_Request& req) const;
-    CgiHandler::Request createCgiRequest(Client& client, const HTTP_Request& req,
+    const ServerConfig& findServerConfig(const Client& client, const HttpRequest& req) const;
+    CgiHandler::Request createCgiRequest(Client& client, const HttpRequest& req,
                                          const LocationConfig* loc) const;
 };

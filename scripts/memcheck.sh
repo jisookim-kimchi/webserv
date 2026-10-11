@@ -35,8 +35,9 @@ build_and_run() {
 run_unit_asan() {
   # Config tests fork+exec heavily; ASan+fork is flaky — still run, but last.
   build_and_run test_http_request \
-    tests/test_HTTP_request.cpp \
-    srcs/HTTP_request.cpp
+    tests/test_http_request.cpp \
+    srcs/HttpRequest.cpp \
+    srcs/Utils.cpp
 
   build_and_run test_http_response \
     tests/test_http_response.cpp \

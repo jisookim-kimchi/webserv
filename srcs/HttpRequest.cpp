@@ -1,49 +1,43 @@
-#include "HTTP_Request.hpp"
+#include "HttpRequest.hpp"
 
 /**
  * @brief fetches header value by key.
  * @param key The header field name.
  * @return The header value, or empty string if not found.
  */
-std::string HTTP_Request::getHeader(const std::string& key) const
+std::string HttpRequest::getHeader(const std::string& key) const
 {
-    std::string lowerKey = key;
-    for (size_t i = 0; i < lowerKey.size(); ++i)
-    {
-        if (lowerKey[i] >= 'A' && lowerKey[i] <= 'Z')
-            lowerKey[i] |= 0x20;
-    }
-    std::map<std::string, std::string>::const_iterator it = headers_.find(lowerKey);
+    std::map<std::string, std::string>::const_iterator it = headers_.find(Utils::toLower(key));
     if (it != headers_.end())
         return it->second;
     return "";
 }
 
 /**
- * @brief  convert HTTP_METHOD enum value to string.
+ * @brief  convert HttpMethod enum value to string.
  * @return String representation of the method.
  */
-std::string HTTP_Request::getMethodString() const
+std::string HttpRequest::getMethodString() const
 {
     switch (method_)
     {
-        case HTTP_METHOD::GET:
+        case HttpMethod::GET:
             return "GET";
-        case HTTP_METHOD::POST:
+        case HttpMethod::POST:
             return "POST";
-        case HTTP_METHOD::DELETE:
+        case HttpMethod::DELETE:
             return "DELETE";
-        case HTTP_METHOD::HEAD:
+        case HttpMethod::HEAD:
             return "HEAD";
-        case HTTP_METHOD::PUT:
+        case HttpMethod::PUT:
             return "PUT";
-        case HTTP_METHOD::PATCH:
+        case HttpMethod::PATCH:
             return "PATCH";
-        case HTTP_METHOD::OPTIONS:
+        case HttpMethod::OPTIONS:
             return "OPTIONS";
-        case HTTP_METHOD::TRACE:
+        case HttpMethod::TRACE:
             return "TRACE";
-        case HTTP_METHOD::CONNECT:
+        case HttpMethod::CONNECT:
             return "CONNECT";
         default:
             return "UNKNOWN";
@@ -51,78 +45,33 @@ std::string HTTP_Request::getMethodString() const
 }
 
 /**
- * @brief parses HTTP method token from buffer to HTTP_METHOD enum.
+ * @brief parses HTTP method token from buffer to HttpMethod enum.
  * @param buffer raw request buffer.
  * @param len Length of the method token.
- * @return HTTP_METHOD enum value, or UNKNOWN if not supported.
+ * @return HttpMethod enum value, or UNKNOWN if not supported.
  */
-static HTTP_METHOD parseMethod(const std::string &buffer, size_t len)
+static HttpMethod parseMethod(const std::string &buffer, size_t len)
 {
     if (buffer.compare(0, len, "GET") == 0)
-        return HTTP_METHOD::GET;
+        return HttpMethod::GET;
     else if (buffer.compare(0, len, "POST") == 0)
-        return HTTP_METHOD::POST;
+        return HttpMethod::POST;
     else if (buffer.compare(0, len, "DELETE") == 0)
-        return HTTP_METHOD::DELETE;
+        return HttpMethod::DELETE;
     else if (buffer.compare(0, len, "HEAD") == 0)
-        return HTTP_METHOD::HEAD;
+        return HttpMethod::HEAD;
     else if (buffer.compare(0, len, "PUT") == 0)
-        return HTTP_METHOD::PUT;
+        return HttpMethod::PUT;
     else if (buffer.compare(0, len, "PATCH") == 0)
-        return HTTP_METHOD::PATCH;
+        return HttpMethod::PATCH;
     else if (buffer.compare(0, len, "OPTIONS") == 0)
-        return HTTP_METHOD::OPTIONS;
+        return HttpMethod::OPTIONS;
     else if (buffer.compare(0, len, "TRACE") == 0)
-        return HTTP_METHOD::TRACE;
+        return HttpMethod::TRACE;
     else if (buffer.compare(0, len, "CONNECT") == 0)
-        return HTTP_METHOD::CONNECT;
+        return HttpMethod::CONNECT;
     else
-        return HTTP_METHOD::UNKNOWN;
-}
-
-/**
- * @brief converts a hex char to int value.
- * @param c hex char.
- * @param digit int value.
- * @return true if valid hex char, false otherwise.
- */
-static bool hexCharToInt(char c, size_t &digit)
-{
-    if (c >= '0' && c <= '9')
-    {
-        digit = c - '0';
-        return true;
-    }
-    char lower = c | 0x20;
-    if (lower >= 'a' && lower <= 'f')
-    {
-        digit = lower - 'a' + 10;
-        return true;
-    }
-    return false;
-}
-
-/**
- * @brief converts a hex string range to size_t integer.
- * @param str source string containing hex numbers.
- * @param pos starting offset of hex string.
- * @param len length of hex string.
- * @param outSize size_t integer.
- * @return true if valid hex number, false otherwise.
- */
-static bool hexStrRangeToSize(const std::string &str, size_t pos, size_t len, size_t &outSize)
-{
-    if (len == 0 || pos + len > str.size())
-        return false;
-    outSize = 0;
-    for (size_t i = 0; i < len; ++i)
-    {
-        size_t digit = 0;
-        if (!hexCharToInt(str[pos + i], digit))
-            return false;
-        outSize = (outSize << 4) | digit;
-    }
-    return true;
+        return HttpMethod::UNKNOWN;
 }
 
 /**
@@ -145,7 +94,7 @@ static bool urlDecode(const std::string &src, size_t pos, size_t len, std::strin
             if (i + 2 >= len)
                 return false;
             size_t high = 0, low = 0;
-            if (!hexCharToInt(src[cur + 1], high) || !hexCharToInt(src[cur + 2], low))
+            if (!Utils::hexCharToInt(src[cur + 1], high) || !Utils::hexCharToInt(src[cur + 2], low))
                 return false;
             out += static_cast<char>((high << 4) | low);
             i += 2;
@@ -164,7 +113,7 @@ static bool urlDecode(const std::string &src, size_t pos, size_t len, std::strin
  * @param headerStart output parameter updated to the byte offset where headers begin.
  * @return true if Request-Line is valid HTTP/1.1, if not, failed.
  */
-bool HTTP_Request::parseRequestLine(const std::string &buffer, size_t &headerStart)
+bool HttpRequest::parseRequestLine(const std::string &buffer, size_t &headerStart)
 {
     size_t find_r_n = buffer.find("\r\n");
     if (find_r_n == std::string::npos)
@@ -173,7 +122,7 @@ bool HTTP_Request::parseRequestLine(const std::string &buffer, size_t &headerSta
     if (firstSpace == std::string::npos)
         return false;
     method_ = parseMethod(buffer, firstSpace);
-    if (method_ == HTTP_METHOD::UNKNOWN)
+    if (method_ == HttpMethod::UNKNOWN)
         return false;
     size_t secondSpace = buffer.find(' ', firstSpace + 1);
     if (secondSpace == std::string::npos)
@@ -206,7 +155,7 @@ bool HTTP_Request::parseRequestLine(const std::string &buffer, size_t &headerSta
  * @param headerEnd byte offset where header section ends ("\r\n\r\n").
  * @return true if all headers are valid, if not, failed.
  */
-bool HTTP_Request::parseHeaders(const std::string &buffer, size_t headerStart, size_t headerEnd)
+bool HttpRequest::parseHeaders(const std::string &buffer, size_t headerStart, size_t headerEnd)
 {
     bool hasHost = false;
     std::string key;
@@ -222,15 +171,7 @@ bool HTTP_Request::parseHeaders(const std::string &buffer, size_t headerStart, s
         if (colon == std::string::npos || colon > rn)
             return false;
 
-        size_t keyLen = colon - headerStart;
-        key.resize(keyLen);
-        for (size_t i = 0; i < keyLen; ++i)
-        {
-            char c = buffer[headerStart + i];
-            if (c >= 'A' && c <= 'Z')
-                c |= 0x20;
-            key[i] = c;
-        }
+        key = Utils::toLower(buffer.substr(headerStart, colon - headerStart));
         size_t valStart = colon + 1;
         while (valStart < rn && (buffer[valStart] == ' ' || buffer[valStart] == '\t'))
             valStart++;
@@ -254,7 +195,7 @@ bool HTTP_Request::parseHeaders(const std::string &buffer, size_t headerStart, s
  * @param headerEnd byte offset where headers end ("\r\n\r\n").
  * @return true if body was successfully read and validated, if not, failed.
  */
-bool HTTP_Request::parseBody(const std::string &buffer, size_t headerEnd)
+bool HttpRequest::parseBody(const std::string &buffer, size_t headerEnd)
 {
     std::map<std::string, std::string>::const_iterator conLenIt = headers_.find("content-length");
     bool hasContentLength = (conLenIt != headers_.end());
@@ -275,7 +216,7 @@ bool HTTP_Request::parseBody(const std::string &buffer, size_t headerEnd)
             if (rn == std::string::npos)
                 return false;
             size_t chunkSize = 0;
-            if (!hexStrRangeToSize(buffer, pos, rn - pos, chunkSize))
+            if (!Utils::parseHexSize(buffer, pos, rn - pos, chunkSize))
                 return false;
             if (chunkSize == 0)
             {
@@ -295,16 +236,9 @@ bool HTTP_Request::parseBody(const std::string &buffer, size_t headerEnd)
 
     if (hasContentLength)
     {
-        const std::string& realLenStr = conLenIt->second;
-        if (realLenStr.empty())
-            return false;
         size_t expectedLen = 0;
-        for (size_t i = 0; i < realLenStr.size(); i++)
-        {
-            if (!isdigit(realLenStr[i]))
-                return false;
-            expectedLen = (expectedLen << 3) + (expectedLen << 1) + (realLenStr[i] - '0');
-        }
+        if (!Utils::parseSizeDecimal(conLenIt->second, expectedLen))
+            return false;
         const size_t available = buffer.size() - bodyStart;
         if (available < expectedLen)
             return false;
@@ -322,7 +256,7 @@ bool HTTP_Request::parseBody(const std::string &buffer, size_t headerEnd)
  * @param buffer complete raw HTTP request string.
  * @return true if parsing succeeded,if not, failed.
  */
-bool HTTP_Request::parse(const std::string &buffer)
+bool HttpRequest::parse(const std::string &buffer)
 {
     size_t headerEnd = buffer.find("\r\n\r\n");
     if (headerEnd == std::string::npos)
