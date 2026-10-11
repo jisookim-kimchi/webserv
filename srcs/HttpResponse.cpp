@@ -167,8 +167,6 @@ std::string HttpResponse::statusText(int code) {
             return "Payload Too Large";
         case 500:
             return "Internal Server Error";
-        case 501:
-            return "Not Implemented";
         case 504:
             return "Gateway Timeout";
         default:
@@ -214,12 +212,13 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
         return;
     }
 
+    const std::string path = normalizePath(request.path.empty() ? "/" : request.path);
+
     if (!location.getCgiPass().empty()) {
         needsCgi_ = true;
         return;
     }
 
-    const std::string path = normalizePath(request.path.empty() ? "/" : request.path);
     const std::string fsPath = mapUrlToFs(location, path);
     if (fsPath.empty()) {
         setError(403, server, &location);
@@ -239,7 +238,7 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
         return;
     }
 
-    if (request.method == "POST") {
+    if (request.method == "POST" || request.method == "PUT") {
         std::string dest = fsPath;
         if (isDir(fsPath) || (!path.empty() && path.back() == '/')) {
             if (!isDir(fsPath)) {
@@ -270,7 +269,6 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
         return;
     }
 
-    // GET
     if (isDir(fsPath)) {
         for (const std::string& index : location.getIndex()) {
             const std::string candidate = Utils::joinPath(fsPath, index);
