@@ -30,6 +30,9 @@ class Server {
 
     bool isListenSocket(int fd);
     bool hasActiveCgi() const;
+    size_t countCgiRunning() const;
+    void resumeWaitingClients(int epollFd);
+    void pauseClientRead(Client& client, int epollFd);
     void armClientWrite(Client& client, int epollFd);
     void closeClient(std::map<int, std::unique_ptr<Client>>::iterator it, int epollFd);
 

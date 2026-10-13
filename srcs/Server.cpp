@@ -15,6 +15,7 @@
 #include <sys/socket.h>
 #include <ctime>
 #include <unistd.h>
+#include <vector>
 
 constexpr int MAX_EVENTS = 256;
 constexpr size_t BUF_SIZE = 65536;
@@ -22,6 +23,8 @@ constexpr int CGI_POLL_TIMEOUT_MS = 200;
 constexpr int CGI_EXECUTION_TIMEOUT_MS = 60000;
 constexpr int IDLE_POLL_TIMEOUT_MS = 1000;
 constexpr time_t CLIENT_IDLE_TIMEOUT_SEC = 60;
+// Bound concurrent CGI: 20×100MB bodies otherwise OOM the process (tester EOF).
+constexpr size_t MAX_ACTIVE_CGI = 2;
 
 namespace {
 
@@ -290,6 +293,7 @@ void Server::handleNewConnection(int listenFd, int epollFd) {
 
 void Server::closeClient(std::map<int, std::unique_ptr<Client>>::iterator it, int epollFd) {
     Client& client = *(it->second);
+    const bool wasCgi = client.getState() == ClientState::CGI_RUNNING;
     // Drop any CGI pipe watches for this client.
     for (auto pit = cgiPipeToClient_.begin(); pit != cgiPipeToClient_.end();) {
         if (pit->second == client.getFd()) {
@@ -301,6 +305,8 @@ void Server::closeClient(std::map<int, std::unique_ptr<Client>>::iterator it, in
     }
     epoll_ctl(epollFd, EPOLL_CTL_DEL, client.getFd(), nullptr);
     clients_.erase(it);
+    if (wasCgi)
+        resumeWaitingClients(epollFd);
 }
 
 void Server::armClientWrite(Client& client, int epollFd) {
@@ -311,11 +317,57 @@ void Server::armClientWrite(Client& client, int epollFd) {
     epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
 }
 
+size_t Server::countCgiRunning() const {
+    size_t n = 0;
+    for (const auto& entry : clients_) {
+        if (entry.second->getState() == ClientState::CGI_RUNNING)
+            ++n;
+    }
+    return n;
+}
+
+void Server::pauseClientRead(Client& client, int epollFd) {
+    struct epoll_event ev {};
+    ev.events = EPOLLRDHUP;
+    ev.data.fd = client.getFd();
+    epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
+}
+
+void Server::resumeWaitingClients(int epollFd) {
+    if (countCgiRunning() >= MAX_ACTIVE_CGI)
+        return;
+    std::vector<int> readyFds;
+    for (auto& entry : clients_) {
+        Client& client = *entry.second;
+        if (client.getState() != ClientState::READING_REQUEST)
+            continue;
+        struct epoll_event ev {};
+        ev.events = EPOLLIN | EPOLLRDHUP;
+        ev.data.fd = client.getFd();
+        epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
+        if (isRequestComplete(client.getRequestBuffer()))
+            readyFds.push_back(client.getFd());
+    }
+    for (int fd : readyFds) {
+        if (countCgiRunning() >= MAX_ACTIVE_CGI)
+            break;
+        auto it = clients_.find(fd);
+        if (it == clients_.end() || it->second->getState() != ClientState::READING_REQUEST)
+            continue;
+        processRequest(*it->second, epollFd);
+    }
+}
+
 void Server::handleClientRead(int clientFd, int epollFd,
                               std::map<int, std::unique_ptr<Client>>::iterator it) {
     Client& client = *(it->second);
     if (client.getState() == ClientState::WRITING_RESPONSE)
         return;
+    if (client.getState() == ClientState::READING_REQUEST &&
+        countCgiRunning() >= MAX_ACTIVE_CGI) {
+        pauseClientRead(client, epollFd);
+        return;
+    }
 
     char buf[BUF_SIZE];
     ssize_t ret = read(clientFd, buf, BUF_SIZE);
@@ -337,25 +389,32 @@ void Server::handleClientRead(int clientFd, int epollFd,
 void Server::processRequest(Client& client, int epollFd) {
     HttpRequest req;
     if (req.parse(client.getRequestBuffer())) {
-        client.getRequestBuffer().clear();
         const ServerConfig& config = findServerConfig(client, req);
         HttpResponse::RequestView view;
         view.method = req.getMethodString();
         view.path = req.getPath();
-        view.body = req.getBody();
         view.errorStatus = 0;
+        view.body.swap(req.getBody());
 
         HttpResponse res;
         res.buildForPath(view, config);
 
         if (res.needsCgi()) {
+            if (countCgiRunning() >= MAX_ACTIVE_CGI) {
+                pauseClientRead(client, epollFd);
+                return;
+            }
+            client.getRequestBuffer().clear();
+            req.getBody().swap(view.body);
             const LocationConfig* loc =
                 LocationMatch::match(req.getPath(), req.getMethodString(), config);
             handleCgi(client, req, loc, epollFd);
             return;
         }
+        client.getRequestBuffer().clear();
         client.setResponseBuffer(res.getRaw());
     } else {
+        client.getRequestBuffer().clear();
         HttpResponse::RequestView view;
         view.errorStatus = 400;
         HttpResponse res;
@@ -485,6 +544,7 @@ void Server::finishCgi(Client& client, int epollFd) {
     }
     client.clearCgi();
     armClientWrite(client, epollFd);
+    resumeWaitingClients(epollFd);
 }
 
 void Server::handleCgi(Client& client, HttpRequest& req, const LocationConfig* loc,
@@ -511,6 +571,7 @@ void Server::handleCgi(Client& client, HttpRequest& req, const LocationConfig* l
         res.buildForPath(view, config);
         client.setResponseBuffer(res.getRaw());
         armClientWrite(client, epollFd);
+        resumeWaitingClients(epollFd);
     }
 }
 
