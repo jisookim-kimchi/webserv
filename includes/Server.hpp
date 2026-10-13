@@ -30,6 +30,9 @@ class Server {
 
     bool isListenSocket(int fd);
     bool hasActiveCgi() const;
+    size_t countCgiRunning() const;
+    void resumeWaitingClients(int epollFd);
+    void pauseClientRead(Client& client, int epollFd);
     void armClientWrite(Client& client, int epollFd);
     void closeClient(std::map<int, std::unique_ptr<Client>>::iterator it, int epollFd);
 
@@ -40,14 +43,15 @@ class Server {
                            std::map<int, std::unique_ptr<Client>>::iterator it);
     void processRequest(Client& client, int epollFd);
 
-    void handleCgi(Client& client, const HttpRequest& req, const LocationConfig* loc, int epollFd);
+    void handleCgi(Client& client, HttpRequest& req, const LocationConfig* loc, int epollFd);
     void handleCgiPipeEvent(int pipeFd, uint32_t events, int epollFd);
     void syncCgiEpoll(Client& client, int epollFd);
     void finishCgi(Client& client, int epollFd);
     void checkCgiTimeouts(int epollFd);
     void checkIdleClients(int epollFd);
 
+    const ServerConfig* selectServerConfig(int port, const std::string& hostHeader) const;
     const ServerConfig& findServerConfig(const Client& client, const HttpRequest& req) const;
-    CgiHandler::Request createCgiRequest(Client& client, const HttpRequest& req,
+    CgiHandler::Request createCgiRequest(Client& client, HttpRequest& req,
                                          const LocationConfig* loc) const;
 };

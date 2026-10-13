@@ -141,6 +141,7 @@ void HttpResponse::reset() {
     body_.clear();
     raw_.clear();
     needsCgi_ = false;
+    omitBody_ = false;
 }
 
 std::string HttpResponse::statusText(int code) {
@@ -167,8 +168,6 @@ std::string HttpResponse::statusText(int code) {
             return "Payload Too Large";
         case 500:
             return "Internal Server Error";
-        case 501:
-            return "Not Implemented";
         case 504:
             return "Gateway Timeout";
         default:
@@ -179,6 +178,7 @@ std::string HttpResponse::statusText(int code) {
 bool HttpResponse::buildForPath(const RequestView& request, const ServerConfig& server) {
     const LocationConfig* loc = LocationMatch::match(request.path, request.method, server);
     if (loc == nullptr) {
+        omitBody_ = (request.method == "HEAD");
         setError(404, server, nullptr);
         return false;
     }
@@ -189,6 +189,7 @@ bool HttpResponse::buildForPath(const RequestView& request, const ServerConfig& 
 void HttpResponse::build(const RequestView& request, const ServerConfig& server,
                          const LocationConfig& location) {
     reset();
+    omitBody_ = (request.method == "HEAD");
 
     if (request.errorStatus != 0) {
         setError(request.errorStatus, server, &location);
@@ -214,12 +215,13 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
         return;
     }
 
+    const std::string path = normalizePath(request.path.empty() ? "/" : request.path);
+
     if (!location.getCgiPass().empty()) {
         needsCgi_ = true;
         return;
     }
 
-    const std::string path = normalizePath(request.path.empty() ? "/" : request.path);
     const std::string fsPath = mapUrlToFs(location, path);
     if (fsPath.empty()) {
         setError(403, server, &location);
@@ -239,7 +241,7 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
         return;
     }
 
-    if (request.method == "POST") {
+    if (request.method == "POST" || request.method == "PUT") {
         std::string dest = fsPath;
         if (isDir(fsPath) || (!path.empty() && path.back() == '/')) {
             if (!isDir(fsPath)) {
@@ -270,7 +272,6 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
         return;
     }
 
-    // GET
     if (isDir(fsPath)) {
         for (const std::string& index : location.getIndex()) {
             const std::string candidate = Utils::joinPath(fsPath, index);
@@ -427,7 +428,9 @@ void HttpResponse::finalize() {
     for (const auto& h : headers_) {
         oss << h.first << ": " << h.second << "\r\n";
     }
-    oss << "\r\n" << body_;
+    oss << "\r\n";
+    if (!omitBody_)
+        oss << body_;
     raw_ = oss.str();
 }
 

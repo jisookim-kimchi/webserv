@@ -41,11 +41,11 @@ Then open `http://127.0.0.1:8080/` in a browser, or use `curl` against ports
 ### Tests
 
 ```bash
-./test.sh all
+./scripts/test.sh all
 ```
 
-Individual modules: `./test.sh config`, `./test.sh cgi`, `./test.sh http_request`,
-`./test.sh http_response`.
+Individual modules: `./scripts/test.sh config`, `./scripts/test.sh cgi`,
+`./scripts/test.sh http_request`, `./scripts/test.sh http_response`.
 
 ### Stress (on Linux)
 
@@ -57,4 +57,3 @@ See [docs/eval-checklist.md](docs/eval-checklist.md) for Siege and peer-evaluati
 - [NGINX Beginner’s Guide](https://nginx.org/en/docs/beginners_guide.html) (config behaviour comparison)
 - [epoll(7)](https://man7.org/linux/man-pages/man7/epoll.7.html)
 - [CGI /1.1](https://datatracker.ietf.org/doc/html/rfc3875)
-

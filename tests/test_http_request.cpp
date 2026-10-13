@@ -83,6 +83,17 @@ void test_dup_host() {
     EXPECT_TRUE(!req.parse(raw));
 }
 
+void test_head() {
+    std::string raw =
+        "HEAD /index.html HTTP/1.1\r\n"
+        "Host: localhost:8080\r\n"
+        "\r\n";
+
+    HttpRequest req;
+    EXPECT_TRUE(req.parse(raw));
+    EXPECT_EQ(req.getMethodString(), "HEAD");
+}
+
 void test_bad_method() {
     std::string raw = 
         "FOOBAR /index.html HTTP/1.1\r\n"
@@ -347,6 +358,7 @@ int main() {
     failed += runTest("test_headers", &test_headers);
     failed += runTest("test_no_host", &test_no_host);
     failed += runTest("test_dup_host", &test_dup_host);
+    failed += runTest("test_head", &test_head);
     failed += runTest("test_bad_method", &test_bad_method);
     failed += runTest("test_bad_version", &test_bad_version);
     failed += runTest("test_chunked", &test_chunked);

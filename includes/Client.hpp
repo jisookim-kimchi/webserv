@@ -39,7 +39,7 @@ class Client {
 
     const std::string& getResponseBuffer() const;
     std::string& getResponseBuffer();
-    void setResponseBuffer(const std::string& response);
+    void setResponseBuffer(std::string response);
 
     CgiHandler* cgi() { return cgi_.get(); }
     void setCgi(std::unique_ptr<CgiHandler> cgi) { cgi_ = std::move(cgi); }

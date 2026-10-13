@@ -57,7 +57,7 @@ class CgiHandler {
     CgiHandler& operator=(const CgiHandler&) = delete;
 
     // fork + pipe setup. Body is fed later through onStdinReady().
-    void launch(const Request& request, int timeoutMs = 5000);
+    void launch(Request request, int timeoutMs = 5000);
 
     // --- poll registration (Server) ---
     int stdinFd() const;

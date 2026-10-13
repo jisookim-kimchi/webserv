@@ -17,7 +17,7 @@ jobs:
 
       - name: ASan unit tests
         run: |
-          chmod +x scripts/memcheck.sh test.sh
+          chmod +x scripts/memcheck.sh scripts/test.sh
           ./scripts/memcheck.sh unit
 
       - name: Build webserv

@@ -7,7 +7,6 @@
 #include <arpa/inet.h>
 #include <cctype>
 #include <cerrno>
-#include <fcntl.h>
 #include <netinet/tcp.h>
 #include <poll.h>
 #include <stdexcept>
@@ -16,6 +15,7 @@
 #include <sys/socket.h>
 #include <ctime>
 #include <unistd.h>
+#include <vector>
 
 constexpr int MAX_EVENTS = 256;
 constexpr size_t BUF_SIZE = 65536;
@@ -23,6 +23,8 @@ constexpr int CGI_POLL_TIMEOUT_MS = 200;
 constexpr int CGI_EXECUTION_TIMEOUT_MS = 60000;
 constexpr int IDLE_POLL_TIMEOUT_MS = 1000;
 constexpr time_t CLIENT_IDLE_TIMEOUT_SEC = 60;
+// Bound concurrent CGI: 20×100MB bodies otherwise OOM the process (tester EOF).
+constexpr size_t MAX_ACTIVE_CGI = 2;
 
 namespace {
 
@@ -71,7 +73,7 @@ bool isRequestComplete(const std::string& buf) {
             if (rn == std::string::npos)
                 return false;
             size_t chunkSize = 0;
-            if (!Utils::parseHexSize(buf.substr(pos, rn - pos), chunkSize))
+            if (!Utils::parseHexSize(buf, pos, rn - pos, chunkSize))
                 return true;
             if (chunkSize == 0)
                 return rn + 4 <= buf.size();
@@ -99,9 +101,12 @@ std::string resolveScriptPath(const HttpResponse& mapper, const ServerConfig& se
     if (!fs.empty())
         return fs;
     const LocationConfig* rooted = LocationMatch::matchPrefixWithRoot(urlPath, server);
-    if (rooted == nullptr)
-        return "";
-    return mapper.mapUrlToFs(*rooted, urlPath);
+    if (rooted != nullptr) {
+        fs = mapper.mapUrlToFs(*rooted, urlPath);
+        if (!fs.empty())
+            return fs;
+    }
+    return loc.getCgiPass();
 }
 
 uint32_t pollToEpoll(short pevents) {
@@ -262,7 +267,9 @@ void Server::handleNewConnection(int listenFd, int epollFd) {
     if (clientFd == -1)
         return;
 
-    if (fcntl(clientFd, F_SETFL, O_NONBLOCK) == -1) {
+    try {
+        Utils::setNonBlocking(clientFd);
+    } catch (const std::exception&) {
         close(clientFd);
         return;
     }
@@ -286,6 +293,7 @@ void Server::handleNewConnection(int listenFd, int epollFd) {
 
 void Server::closeClient(std::map<int, std::unique_ptr<Client>>::iterator it, int epollFd) {
     Client& client = *(it->second);
+    const bool wasCgi = client.getState() == ClientState::CGI_RUNNING;
     // Drop any CGI pipe watches for this client.
     for (auto pit = cgiPipeToClient_.begin(); pit != cgiPipeToClient_.end();) {
         if (pit->second == client.getFd()) {
@@ -297,6 +305,8 @@ void Server::closeClient(std::map<int, std::unique_ptr<Client>>::iterator it, in
     }
     epoll_ctl(epollFd, EPOLL_CTL_DEL, client.getFd(), nullptr);
     clients_.erase(it);
+    if (wasCgi)
+        resumeWaitingClients(epollFd);
 }
 
 void Server::armClientWrite(Client& client, int epollFd) {
@@ -307,11 +317,57 @@ void Server::armClientWrite(Client& client, int epollFd) {
     epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
 }
 
+size_t Server::countCgiRunning() const {
+    size_t n = 0;
+    for (const auto& entry : clients_) {
+        if (entry.second->getState() == ClientState::CGI_RUNNING)
+            ++n;
+    }
+    return n;
+}
+
+void Server::pauseClientRead(Client& client, int epollFd) {
+    struct epoll_event ev {};
+    ev.events = EPOLLRDHUP;
+    ev.data.fd = client.getFd();
+    epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
+}
+
+void Server::resumeWaitingClients(int epollFd) {
+    if (countCgiRunning() >= MAX_ACTIVE_CGI)
+        return;
+    std::vector<int> readyFds;
+    for (auto& entry : clients_) {
+        Client& client = *entry.second;
+        if (client.getState() != ClientState::READING_REQUEST)
+            continue;
+        struct epoll_event ev {};
+        ev.events = EPOLLIN | EPOLLRDHUP;
+        ev.data.fd = client.getFd();
+        epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
+        if (isRequestComplete(client.getRequestBuffer()))
+            readyFds.push_back(client.getFd());
+    }
+    for (int fd : readyFds) {
+        if (countCgiRunning() >= MAX_ACTIVE_CGI)
+            break;
+        auto it = clients_.find(fd);
+        if (it == clients_.end() || it->second->getState() != ClientState::READING_REQUEST)
+            continue;
+        processRequest(*it->second, epollFd);
+    }
+}
+
 void Server::handleClientRead(int clientFd, int epollFd,
                               std::map<int, std::unique_ptr<Client>>::iterator it) {
     Client& client = *(it->second);
     if (client.getState() == ClientState::WRITING_RESPONSE)
         return;
+    if (client.getState() == ClientState::READING_REQUEST &&
+        countCgiRunning() >= MAX_ACTIVE_CGI) {
+        pauseClientRead(client, epollFd);
+        return;
+    }
 
     char buf[BUF_SIZE];
     ssize_t ret = read(clientFd, buf, BUF_SIZE);
@@ -337,20 +393,28 @@ void Server::processRequest(Client& client, int epollFd) {
         HttpResponse::RequestView view;
         view.method = req.getMethodString();
         view.path = req.getPath();
-        view.body = req.getBody();
         view.errorStatus = 0;
+        view.body.swap(req.getBody());
 
         HttpResponse res;
         res.buildForPath(view, config);
 
         if (res.needsCgi()) {
+            if (countCgiRunning() >= MAX_ACTIVE_CGI) {
+                pauseClientRead(client, epollFd);
+                return;
+            }
+            client.getRequestBuffer().clear();
+            req.getBody().swap(view.body);
             const LocationConfig* loc =
                 LocationMatch::match(req.getPath(), req.getMethodString(), config);
             handleCgi(client, req, loc, epollFd);
             return;
         }
+        client.getRequestBuffer().clear();
         client.setResponseBuffer(res.getRaw());
     } else {
+        client.getRequestBuffer().clear();
         HttpResponse::RequestView view;
         view.errorStatus = 400;
         HttpResponse res;
@@ -361,34 +425,37 @@ void Server::processRequest(Client& client, int epollFd) {
     armClientWrite(client, epollFd);
 }
 
-const ServerConfig& Server::findServerConfig(const Client& client, const HttpRequest& req) const {
-    int clientPort = client.getServerPort();
-    std::string hostHeader = req.getHeader("host");
+const ServerConfig* Server::selectServerConfig(int port, const std::string& hostHeader) const {
     size_t colon = hostHeader.find(':');
     size_t hostNameLen = (colon != std::string::npos) ? colon : hostHeader.length();
     const ServerConfig* defaultServer = nullptr;
     for (const auto& config : serverConfigs_) {
-        const auto& ports = config.getPort();
         bool portMatch = false;
-        for (uint16_t p : ports) {
-            if (p == clientPort) {
+        for (uint16_t p : config.getPort()) {
+            if (p == port) {
                 portMatch = true;
                 break;
             }
         }
         if (!portMatch)
             continue;
-        if (!defaultServer)
+        if (defaultServer == nullptr)
             defaultServer = &config;
         for (const auto& name : config.getServerName()) {
             if (name.length() == hostNameLen && hostHeader.compare(0, hostNameLen, name) == 0)
-                return config;
+                return &config;
         }
     }
-    return defaultServer ? *defaultServer : serverConfigs_[0];
+    return defaultServer;
 }
 
-CgiHandler::Request Server::createCgiRequest(Client& client, const HttpRequest& req,
+const ServerConfig& Server::findServerConfig(const Client& client, const HttpRequest& req) const {
+    const ServerConfig* selected =
+        selectServerConfig(client.getServerPort(), req.getHeader("host"));
+    return selected != nullptr ? *selected : serverConfigs_[0];
+}
+
+CgiHandler::Request Server::createCgiRequest(Client& client, HttpRequest& req,
                                              const LocationConfig* loc) const {
     CgiHandler::Request cgiReq;
     const ServerConfig& config = findServerConfig(client, req);
@@ -396,11 +463,10 @@ CgiHandler::Request Server::createCgiRequest(Client& client, const HttpRequest& 
     if (loc != nullptr) {
         cgiReq.interpreterPath = loc->getCgiPass();
         HttpResponse mapper;
-        const std::string scriptPath = resolveScriptPath(mapper, config, *loc, req.getPath());
-        cgiReq.scriptPath = scriptPath;
+        cgiReq.scriptPath = resolveScriptPath(mapper, config, *loc, req.getPath());
         cgiReq.documentRoot =
-            loc->getRoot().empty() ? Utils::dirName(scriptPath) : loc->getRoot();
-        cgiReq.workingDirectory = Utils::dirName(scriptPath);
+            loc->getRoot().empty() ? Utils::dirName(cgiReq.scriptPath) : loc->getRoot();
+        cgiReq.workingDirectory = Utils::dirName(cgiReq.scriptPath);
     }
 
     cgiReq.requestMethod = req.getMethodString();
@@ -409,7 +475,7 @@ CgiHandler::Request Server::createCgiRequest(Client& client, const HttpRequest& 
         cgiReq.requestUri += "?" + req.getQueryString();
     cgiReq.queryString = req.getQueryString();
     cgiReq.contentType = req.getHeader("content-type");
-    cgiReq.requestBody = req.getBody();
+    cgiReq.requestBody = std::move(req.getBody());
     cgiReq.headers = req.getHeaders();
     cgiReq.scriptName = req.getPath();
     cgiReq.pathInfo = req.getPath();
@@ -478,9 +544,10 @@ void Server::finishCgi(Client& client, int epollFd) {
     }
     client.clearCgi();
     armClientWrite(client, epollFd);
+    resumeWaitingClients(epollFd);
 }
 
-void Server::handleCgi(Client& client, const HttpRequest& req, const LocationConfig* loc,
+void Server::handleCgi(Client& client, HttpRequest& req, const LocationConfig* loc,
                        int epollFd) {
     const ServerConfig& config = findServerConfig(client, req);
     try {
@@ -504,6 +571,7 @@ void Server::handleCgi(Client& client, const HttpRequest& req, const LocationCon
         res.buildForPath(view, config);
         client.setResponseBuffer(res.getRaw());
         armClientWrite(client, epollFd);
+        resumeWaitingClients(epollFd);
     }
 }
 
@@ -546,7 +614,8 @@ void Server::checkCgiTimeouts(int epollFd) {
 void Server::checkIdleClients(int epollFd) {
     const time_t now = std::time(nullptr);
     for (auto it = clients_.begin(); it != clients_.end();) {
-        if (it->second->getState() == ClientState::CGI_RUNNING) {
+        const ClientState state = it->second->getState();
+        if (state == ClientState::READING_REQUEST || state == ClientState::CGI_RUNNING) {
             ++it;
             continue;
         }

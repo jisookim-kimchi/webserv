@@ -23,8 +23,8 @@ jobs:
 
       - name: Run parser test
         run: |
-          chmod +x test.sh
-          ./test.sh all
+          chmod +x scripts/test.sh
+          ./scripts/test.sh all
 
       - name: Verify Generated Parser Output
         run: git diff --exit-code -- tests/parseServer_parseLocation.txt

@@ -1,5 +1,6 @@
 #include "../includes/ConfigParser.hpp"
 #include <cctype>
+#include <charconv>
 #include <stdexcept>
 #include <fstream>
 #include <sstream>
@@ -11,14 +12,11 @@ namespace {
 uint16_t parsePortStrict(const std::string& token) {
     if (token.empty())
         throw std::invalid_argument("bad port number: " + token);
-    size_t idx = 0;
     unsigned long port = 0;
-    try {
-        port = std::stoul(token, &idx, 10);
-    } catch (const std::exception&) {
-        throw std::invalid_argument("bad port number: " + token);
-    }
-    if (idx != token.size() || port > 65535 || port == 0)
+    const auto result =
+        std::from_chars(token.data(), token.data() + token.size(), port, 10);
+    if (result.ec != std::errc() || result.ptr != token.data() + token.size() || port == 0 ||
+        port > 65535)
         throw std::invalid_argument("bad port number: " + token);
     return static_cast<uint16_t>(port);
 }
@@ -27,20 +25,19 @@ uint64_t parseBodySizeStrict(const std::string& token) {
     if (token.empty() || !std::isdigit(static_cast<unsigned char>(token[0])))
         throw std::invalid_argument("bad client_max_body_size: " + token);
 
-    size_t idx = 0;
     uint64_t value = 0;
-    try {
-        value = std::stoull(token, &idx, 10);
-    } catch (const std::exception&) {
+    const char* first = token.data();
+    const char* last = token.data() + token.size();
+    const auto result = std::from_chars(first, last, value, 10);
+    if (result.ec != std::errc() || result.ptr == first)
         throw std::invalid_argument("bad client_max_body_size: " + token);
-    }
 
-    if (idx == token.size())
+    if (result.ptr == last)
         return value;
-    if (idx + 1 != token.size())
+    if (result.ptr + 1 != last)
         throw std::invalid_argument("bad client_max_body_size: " + token);
 
-    const char unit = token[idx];
+    const char unit = *result.ptr;
     if (unit == 'K' || unit == 'k')
         return value * 1024ULL;
     if (unit == 'M' || unit == 'm')
@@ -48,6 +45,14 @@ uint64_t parseBodySizeStrict(const std::string& token) {
     if (unit == 'G' || unit == 'g')
         return value * 1024ULL * 1024ULL * 1024ULL;
     throw std::invalid_argument("bad client_max_body_size: " + token);
+}
+
+const std::string& requireArg(const std::vector<std::string>& tokens, size_t& index,
+                              const char* directive) {
+    ++index;
+    if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";")
+        throw std::invalid_argument(std::string("error: bad argument for '") + directive + "'");
+    return tokens[index];
 }
 
 }  // namespace
@@ -115,7 +120,7 @@ std::vector<std::string> ConfigParser::tokenize(const std::string& input) {
             }
             while (i < input.length() && input[i] != '\n')
                 i++;
-        } else if (isspace(input[i])) {
+        } else if (std::isspace(static_cast<unsigned char>(input[i]))) {
             if (!token.empty()) {
                 tokens.push_back(token);
                 token.clear();
@@ -223,11 +228,8 @@ void ConfigParser::parseServerKeyword(const std::vector<std::string>& tokens, si
             index++;
         }
     } else if (found == "client_max_body_size") {
-        index++;
-        if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
-            throw std::invalid_argument("error: bad argument for 'client_max_body_size'");
-        }
-        server.setClientMaxBodySize(parseBodySizeStrict(tokens[index]));
+        server.setClientMaxBodySize(
+            parseBodySizeStrict(requireArg(tokens, index, "client_max_body_size")));
         index++;
     } else if (found == "error_page") {
         index++;
@@ -325,16 +327,11 @@ void ConfigParser::parseLocationKeyword(const std::vector<std::string>& tokens, 
         if (index < tokens.size() && tokens[index] != ";")
             location.setCgiPass(tokens[index]);
         index++;
-    } else if (found == "client_max_body_size")
-    {
+    } else if (found == "client_max_body_size") {
+        location.setClientMaxBodySize(
+            parseBodySizeStrict(requireArg(tokens, index, "client_max_body_size")));
         index++;
-        if (index >= tokens.size() || tokens[index] == "}" || tokens[index] == ";") {
-            throw std::invalid_argument("error: bad argument for 'client_max_body_size'");
-        }
-        location.setClientMaxBodySize(parseBodySizeStrict(tokens[index]));
-        index++;
-    }
-    else {
+    } else {
         throw std::runtime_error("unknown location keyword: " + tokens[index]);
     }
 

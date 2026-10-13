@@ -3,25 +3,27 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
+#include <charconv>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 
 namespace Utils {
 
 std::string toLower(const std::string& value) {
     std::string result = value;
-    for (char& c : result)
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
     return result;
 }
 
 std::string trimLeft(const std::string& value) {
-    size_t i = 0;
-    while (i < value.size() && (value[i] == ' ' || value[i] == '\t'))
-        ++i;
-    return value.substr(i);
+    const size_t i = value.find_first_not_of(" \t");
+    return i == std::string::npos ? std::string() : value.substr(i);
 }
 
 std::string joinPath(const std::string& left, const std::string& right) {
@@ -74,13 +76,15 @@ bool hexCharToInt(char c, size_t& digit) {
 bool parseHexSize(const std::string& s, size_t pos, size_t len, size_t& out) {
     if (len == 0 || pos + len > s.size())
         return false;
-    out = 0;
-    for (size_t i = 0; i < len; ++i) {
-        size_t digit = 0;
-        if (!hexCharToInt(s[pos + i], digit))
-            return false;
-        out = (out << 4) | digit;
-    }
+    unsigned long long value = 0;
+    const char* first = s.data() + pos;
+    const char* last = first + len;
+    const auto result = std::from_chars(first, last, value, 16);
+    if (result.ec != std::errc() || result.ptr != last)
+        return false;
+    if (value > static_cast<unsigned long long>(std::numeric_limits<size_t>::max()))
+        return false;
+    out = static_cast<size_t>(value);
     return true;
 }
 
@@ -91,12 +95,15 @@ bool parseHexSize(const std::string& s, size_t& out) {
 bool parseSizeDecimal(const std::string& s, size_t& out) {
     if (s.empty())
         return false;
-    out = 0;
-    for (size_t i = 0; i < s.size(); ++i) {
-        if (!std::isdigit(static_cast<unsigned char>(s[i])))
-            return false;
-        out = out * 10 + static_cast<size_t>(s[i] - '0');
-    }
+    unsigned long long value = 0;
+    const char* first = s.data();
+    const char* last = s.data() + s.size();
+    const auto result = std::from_chars(first, last, value, 10);
+    if (result.ec != std::errc() || result.ptr != last)
+        return false;
+    if (value > static_cast<unsigned long long>(std::numeric_limits<size_t>::max()))
+        return false;
+    out = static_cast<size_t>(value);
     return true;
 }
 

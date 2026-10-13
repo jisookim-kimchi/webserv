@@ -9,9 +9,9 @@
 ## Run
 
 ```bash
-./test.sh config
-./test.sh http_request
-./test.sh          # config + cgi + http_request
+./scripts/test.sh config
+./scripts/test.sh http_request
+./scripts/test.sh          # config + cgi + http_request
 ```
 
 Invalid configs are exercised in a forked child because `ConfigParser` calls `exit(1)` on many errors.
