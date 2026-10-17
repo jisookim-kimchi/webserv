@@ -10,9 +10,9 @@
 class ServerConfig {
    public:
     ServerConfig();
-    ~ServerConfig();
-    ServerConfig& operator=(const ServerConfig& other);
-    ServerConfig(const ServerConfig& other);
+    ~ServerConfig() = default;
+    ServerConfig(const ServerConfig& other) = default;
+    ServerConfig& operator=(const ServerConfig& other) = default;
 
     /* GETTER */
     const std::string& getHost() const {

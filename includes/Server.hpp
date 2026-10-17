@@ -20,8 +20,8 @@ class Server {
     void run();
 
    private:
-    const Server& operator=(const Server& other);
-    Server(const Server& other);
+    Server& operator=(const Server& other) = delete;
+    Server(const Server& other) = delete;
 
     std::vector<std::unique_ptr<ListenSocket>> listenSockets_;
     std::vector<ServerConfig> serverConfigs_;
@@ -29,7 +29,6 @@ class Server {
     std::map<int, int> cgiPipeToClient_;  // pipe fd → client fd
 
     bool isListenSocket(int fd);
-    bool hasActiveCgi() const;
     size_t countCgiRunning() const;
     void resumeWaitingClients(int epollFd);
     void pauseClientRead(Client& client, int epollFd);

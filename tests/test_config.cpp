@@ -319,6 +319,7 @@ void parse_invalid_configs_fail() {
         "invalid/location_no_path.config",
         "invalid/random_prose.config",
         "invalid/bad_listen_port.config",
+        "invalid/bad_body_size_overflow.config",
         "invalid/binary_garbage.config",
         "invalid/truncated.config",
     };

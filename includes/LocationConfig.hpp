@@ -7,9 +7,9 @@
 class LocationConfig {
    public:
     LocationConfig();
-    ~LocationConfig();
-    LocationConfig(const LocationConfig& other);
-    LocationConfig& operator=(const LocationConfig& other);
+    ~LocationConfig() = default;
+    LocationConfig(const LocationConfig& other) = default;
+    LocationConfig& operator=(const LocationConfig& other) = default;
 
     /* GETTER */
     const std::string& getRoot() const {
@@ -28,9 +28,6 @@ class LocationConfig {
         return redirection_;
     }
     const std::string& getCgiPass() const {
-        return cgi_pass_;
-    }
-    const std::string& getCgiPath() const {
         return cgi_pass_;
     }
     uint64_t getClientMaxBodySize() const {
@@ -64,9 +61,6 @@ class LocationConfig {
     }
     void setCgiPass(const std::string& cgi_pass) {
         cgi_pass_ = cgi_pass;
-    }
-    void setCgiPath(const std::string& cgi_path) {
-        cgi_pass_ = cgi_path;
     }
     void setAutoindex(bool autoindex) {
         autoindex_ = autoindex;
