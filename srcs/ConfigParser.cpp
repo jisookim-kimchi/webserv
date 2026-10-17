@@ -64,20 +64,6 @@ const std::string& requireArg(const std::vector<std::string>& tokens, size_t& in
 
 }  // namespace
 
-ConfigParser::ConfigParser() {
-}
-ConfigParser::~ConfigParser() {
-}
-ConfigParser::ConfigParser(const ConfigParser& other) {
-    *this = other;
-}
-ConfigParser& ConfigParser::operator=(const ConfigParser& other) {
-    if (this != &other) {
-        server_configs_ = other.server_configs_;
-    }
-    return *this;
-}
-
 void ConfigParser::parse(const std::string& filename) {
     std::string file_data = readFile(filename);
     std::vector<std::string> tokens = tokenize(file_data);

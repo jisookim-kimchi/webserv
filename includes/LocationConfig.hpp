@@ -7,9 +7,9 @@
 class LocationConfig {
    public:
     LocationConfig();
-    ~LocationConfig();
-    LocationConfig(const LocationConfig& other);
-    LocationConfig& operator=(const LocationConfig& other);
+    ~LocationConfig() = default;
+    LocationConfig(const LocationConfig& other) = default;
+    LocationConfig& operator=(const LocationConfig& other) = default;
 
     /* GETTER */
     const std::string& getRoot() const {

@@ -198,14 +198,6 @@ bool Server::isListenSocket(int fd) {
     return false;
 }
 
-bool Server::hasActiveCgi() const {
-    for (const auto& entry : clients_) {
-        if (entry.second->getState() == ClientState::CGI_RUNNING && entry.second->cgi() != nullptr)
-            return true;
-    }
-    return false;
-}
-
 void Server::run() {
     int epollFd = epoll_create(1);
     if (epollFd == -1)
@@ -225,7 +217,7 @@ void Server::run() {
     struct epoll_event events[MAX_EVENTS]{};
     while (true) {
         int timeout = -1;
-        if (hasActiveCgi())
+        if (countCgiRunning() > 0)
             timeout = CGI_POLL_TIMEOUT_MS;
         else if (!clients_.empty())
             timeout = IDLE_POLL_TIMEOUT_MS;

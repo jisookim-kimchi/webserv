@@ -29,7 +29,6 @@ class Server {
     std::map<int, int> cgiPipeToClient_;  // pipe fd → client fd
 
     bool isListenSocket(int fd);
-    bool hasActiveCgi() const;
     size_t countCgiRunning() const;
     void resumeWaitingClients(int epollFd);
     void pauseClientRead(Client& client, int epollFd);
