@@ -1,6 +1,7 @@
 #include "../includes/HttpResponse.hpp"
 #include "../includes/LocationConfig.hpp"
 #include "../includes/ServerConfig.hpp"
+#include "../includes/Utils.hpp"
 
 #include <cstdlib>
 #include <fstream>
@@ -53,6 +54,7 @@ ServerConfig makeServer(const std::string& root) {
     cgi.setPath(".py");
     cgi.setCgiPass("/usr/bin/python3");
     cgi.addAllowMethods("GET");
+    cgi.addAllowMethods("HEAD");
     server.addLocation(cgi);
 
     LocationConfig noIndex;
@@ -97,6 +99,10 @@ int main() {
                response.getRaw().find("\r\n\r\n") + 4 == response.getRaw().size(),
            "HEAD omits body");
 
+    expect(Utils::normalizeUrlPath("/a/../b/./c") == "/b/c", "normalizeUrlPath");
+    expect(Utils::normalizeUrlPath("/cgi-bin/../../../etc/passwd") == "/etc/passwd",
+           "normalize strips parent refs");
+
     response.buildForPath(req("GET", "/", std::string(2048, 'x')), server);
     expect(response.statusCode() == 413, "413");
 
@@ -107,6 +113,10 @@ int main() {
     response.buildForPath(req("GET", "/hello.py"), server);
     expect(response.needsCgi(), "cgi");
     expect(response.getRaw().empty(), "cgi raw empty");
+
+    response.buildForPath(req("HEAD", "/hello.py"), server);
+    expect(response.needsCgi(), "HEAD cgi when allowed");
+    expect(response.getRaw().empty(), "HEAD cgi raw empty until Server formats");
 
     response.buildForPath(req("GET", "/empty/"), server);
     expect(response.statusCode() == 200, "autoindex");

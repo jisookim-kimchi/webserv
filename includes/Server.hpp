@@ -20,8 +20,8 @@ class Server {
     void run();
 
    private:
-    const Server& operator=(const Server& other);
-    Server(const Server& other);
+    Server& operator=(const Server& other) = delete;
+    Server(const Server& other) = delete;
 
     std::vector<std::unique_ptr<ListenSocket>> listenSockets_;
     std::vector<ServerConfig> serverConfigs_;

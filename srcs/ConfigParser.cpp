@@ -1,6 +1,8 @@
 #include "../includes/ConfigParser.hpp"
 #include <cctype>
 #include <charconv>
+#include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <fstream>
 #include <sstream>
@@ -38,12 +40,17 @@ uint64_t parseBodySizeStrict(const std::string& token) {
         throw std::invalid_argument("bad client_max_body_size: " + token);
 
     const char unit = *result.ptr;
+    auto scale = [&](uint64_t factor) -> uint64_t {
+        if (value > std::numeric_limits<uint64_t>::max() / factor)
+            throw std::invalid_argument("bad client_max_body_size: " + token);
+        return value * factor;
+    };
     if (unit == 'K' || unit == 'k')
-        return value * 1024ULL;
+        return scale(1024ULL);
     if (unit == 'M' || unit == 'm')
-        return value * 1024ULL * 1024ULL;
+        return scale(1024ULL * 1024ULL);
     if (unit == 'G' || unit == 'g')
-        return value * 1024ULL * 1024ULL * 1024ULL;
+        return scale(1024ULL * 1024ULL * 1024ULL);
     throw std::invalid_argument("bad client_max_body_size: " + token);
 }
 

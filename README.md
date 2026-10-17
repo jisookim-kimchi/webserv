@@ -23,11 +23,16 @@ provide `sys/epoll.h`, so the full binary will not build there.
 
 ### Run
 
+Always start from the **repository root** so relative `root` / `cgi_pass` paths
+(e.g. `www`, `./cgi_tester`) resolve correctly:
+
 ```bash
 ./webserv [configuration file]
 ```
 
 If no configuration file is given, the default is `configs/test.config`.
+
+Listening is **IPv4 only** (`AF_INET` via `getaddrinfo`).
 
 For a multi-port evaluation demo:
 

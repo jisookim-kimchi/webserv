@@ -30,9 +30,6 @@ class LocationConfig {
     const std::string& getCgiPass() const {
         return cgi_pass_;
     }
-    const std::string& getCgiPath() const {
-        return cgi_pass_;
-    }
     uint64_t getClientMaxBodySize() const {
         return client_max_body_size_;
     }
@@ -64,9 +61,6 @@ class LocationConfig {
     }
     void setCgiPass(const std::string& cgi_pass) {
         cgi_pass_ = cgi_pass;
-    }
-    void setCgiPath(const std::string& cgi_path) {
-        cgi_pass_ = cgi_path;
     }
     void setAutoindex(bool autoindex) {
         autoindex_ = autoindex;
