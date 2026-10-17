@@ -10,6 +10,7 @@
 #include <cstring>
 #include <limits>
 #include <stdexcept>
+#include <vector>
 
 namespace Utils {
 
@@ -88,8 +89,47 @@ bool parseHexSize(const std::string& s, size_t pos, size_t len, size_t& out) {
     return true;
 }
 
-bool parseHexSize(const std::string& s, size_t& out) {
-    return parseHexSize(s, 0, s.size(), out);
+std::string normalizeUrlPath(const std::string& path) {
+    if (path.empty())
+        return "/";
+    std::vector<std::string> parts;
+    std::string cur;
+    for (char c : path) {
+        if (c == '/') {
+            if (!cur.empty()) {
+                parts.push_back(cur);
+                cur.clear();
+            }
+        } else {
+            cur.push_back(c);
+        }
+    }
+    if (!cur.empty())
+        parts.push_back(cur);
+
+    std::vector<std::string> out;
+    for (const std::string& p : parts) {
+        if (p == "." || p.empty())
+            continue;
+        if (p == "..") {
+            if (!out.empty())
+                out.pop_back();
+            continue;
+        }
+        out.push_back(p);
+    }
+
+    std::string result = "/";
+    for (std::size_t i = 0; i < out.size(); ++i) {
+        if (i)
+            result.push_back('/');
+        result += out[i];
+    }
+    if (out.empty())
+        return "/";
+    if (path.size() > 1 && path.back() == '/')
+        result.push_back('/');
+    return result;
 }
 
 bool parseSizeDecimal(const std::string& s, size_t& out) {
