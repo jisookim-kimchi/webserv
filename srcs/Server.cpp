@@ -21,7 +21,8 @@
 constexpr int MAX_EVENTS = 256;
 constexpr size_t BUF_SIZE = 65536;
 constexpr int CGI_POLL_TIMEOUT_MS = 200;
-constexpr int CGI_EXECUTION_TIMEOUT_MS = 5000;
+//we can adjust that time 
+constexpr int CGI_EXECUTION_TIMEOUT_MS = 60000;
 constexpr int IDLE_POLL_TIMEOUT_MS = 1000;
 constexpr time_t CLIENT_IDLE_TIMEOUT_SEC = 60;
 // Bound concurrent CGI: 20×100MB bodies otherwise OOM the process (tester EOF).
@@ -479,6 +480,7 @@ void Server::handleClientRead(int clientFd, int epollFd,
         return;
 
     client.appendRequestBuffer(buf, static_cast<size_t>(ret));
+    client.updateLastActiveTime();
 
     const uint64_t bodyCap = maxConfiguredBodyLimit(serverConfigs_);
     const std::string& reqBuf = client.getRequestBuffer();
