@@ -11,6 +11,7 @@ tests/fixtures/configs/edge/generated_large.config
 tests/test_tokenize.txt
 tests/fixtures/www/upload/upload_*
 www/upload/upload_*
+YoupiBanane/upload_*
 
 # Python
 __pycache__/

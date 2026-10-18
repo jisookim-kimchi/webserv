@@ -174,8 +174,18 @@ void CgiHandler::markDone() {
         errorMessage_ = "CGI execve failed";
         return;
     }
+    if (!WIFEXITED(result_.exitStatus) || WEXITSTATUS(result_.exitStatus) != 0) {
+        state_ = State::Error;
+        errorMessage_ = "CGI process failed";
+        return;
+    }
 
     result_ = parseOutput(rawOutput_, result_.exitStatus);
+    if (result_.headers.empty()) {
+        state_ = State::Error;
+        errorMessage_ = "CGI header not found";
+        return;
+    }
     state_ = State::Done;
 }
 

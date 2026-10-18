@@ -21,6 +21,7 @@
 constexpr int MAX_EVENTS = 256;
 constexpr size_t BUF_SIZE = 65536;
 constexpr int CGI_POLL_TIMEOUT_MS = 200;
+//we can adjust that time 
 constexpr int CGI_EXECUTION_TIMEOUT_MS = 60000;
 constexpr int IDLE_POLL_TIMEOUT_MS = 1000;
 constexpr time_t CLIENT_IDLE_TIMEOUT_SEC = 60;
@@ -29,6 +30,13 @@ constexpr size_t MAX_ACTIVE_CGI = 2;
 
 namespace {
 
+/**
+    @brief : extract header value.
+    @note : ':' is delimiter of header filed, <Header-Name> : <Header-Value>.
+    @param : headersBlock : Header Block
+    @param : keyLower : Header name
+    @return : corresponding header value if not found return "".
+*/
 std::string headerValue(const std::string& headersBlock, const std::string& keyLower) {
     size_t pos = 0;
     while (pos < headersBlock.size()) {
@@ -53,6 +61,11 @@ std::string headerValue(const std::string& headersBlock, const std::string& keyL
     return "";
 }
 
+/**
+    @brief : check if the request is complete.
+    @param : buf : buffer to check
+    @return : true if the request is complete, false otherwise
+*/
 bool isRequestComplete(const std::string& buf) {
     const size_t headerEnd = buf.find("\r\n\r\n");
     if (headerEnd == std::string::npos)
@@ -96,6 +109,14 @@ bool isRequestComplete(const std::string& buf) {
     return true;
 }
 
+/**
+ * @brief : convert URL to real path on file system.
+ * @param mapper : HttpResponse object reference
+ * @param server : current matched ServerConfig
+ * @param loc : requested url matched LocationConfig
+ * @param urlPath : requested HTTP URL path
+ * @return : matched actual cgi script file path on file system.
+ */
 std::string resolveScriptPath(const HttpResponse& mapper, const ServerConfig& server,
                               const LocationConfig& loc, const std::string& urlPath) {
     const std::string path = Utils::normalizeUrlPath(urlPath);
@@ -112,6 +133,11 @@ std::string resolveScriptPath(const HttpResponse& mapper, const ServerConfig& se
     return "";
 }
 
+/**
+ * @brief : since CgiHandler use poll() and Server use epoll(), this function convert poll() event flag to epoll() event flag.
+ * @param pevents : poll() event flag.
+ * @return : epoll() event flag.
+ */
 uint32_t pollToEpoll(short pevents) {
     uint32_t events = 0;
     if (pevents & POLLIN)
@@ -121,6 +147,12 @@ uint32_t pollToEpoll(short pevents) {
     return events;
 }
 
+/**
+ * @brief Format CGI script execution result into HTTP/1.1 response string.
+ * @param cgiResult Parsed output from CGI script execution (status code, headers, body).
+ * @param omitBody Whether to omit response body (e.g. for HEAD requests).
+ * @return Formatted HTTP/1.1 response string to send to client.
+ */
 std::string formatCgiHttp(const CgiHandler::Result& cgiResult, bool omitBody) {
     std::string out = "HTTP/1.1 " + std::to_string(cgiResult.statusCode) + " " +
                       HttpResponse::statusText(cgiResult.statusCode) + "\r\n";
@@ -168,6 +200,11 @@ uint64_t maxConfiguredBodyLimit(const std::vector<ServerConfig>& configs) {
 
 Server::~Server() {}
 
+/**
+ * @brief Server constructor, parses server configurations and initializes listen sockets.
+ * @param serverConfigs Parsed server configurations.
+ * @throws std::runtime_error Duplicate listen address or socket creation/binding failure.
+ */
 Server::Server(const std::vector<ServerConfig>& serverConfigs) : serverConfigs_(serverConfigs) {
     std::map<std::string, bool> seenListen;
     for (const auto& serverConfig : serverConfigs_) {
@@ -190,6 +227,11 @@ Server::Server(const std::vector<ServerConfig>& serverConfigs) : serverConfigs_(
     }
 }
 
+/**
+ * @brief check if the given file descriptor is one of the server's listen sockets
+ * @param fd : file descriptor to check.
+ * @return : true if the file descriptor is a listen socket, false otherwise
+ */
 bool Server::isListenSocket(int fd) {
     for (const auto& listenSocket : listenSockets_) {
         if (listenSocket->getFd() == fd)
@@ -198,6 +240,10 @@ bool Server::isListenSocket(int fd) {
     return false;
 }
 
+/**
+ * @brief Create an epoll instance and start the event loop to process all network I/O and CGI events.
+ * @throws std::runtime_error If epoll_create or epoll_ctl registration fails.
+ */
 void Server::run() {
     int epollFd = epoll_create(1);
     if (epollFd == -1)
@@ -274,6 +320,11 @@ void Server::run() {
     }
 }
 
+/**
+ * @brief accept a new client connection request on the server listen socket and register it as a non-blocking socket with epoll
+ * @param listenFd : file descriptor of the server listen socket where the connection request occurred
+ * @param epollFd : server epoll file descriptor to register the client with
+ */
 void Server::handleNewConnection(int listenFd, int epollFd) {
     struct sockaddr_in clientAddr {};
     socklen_t clientAddrLen = sizeof(clientAddr);
@@ -307,6 +358,11 @@ void Server::handleNewConnection(int listenFd, int epollFd) {
     epoll_ctl(epollFd, EPOLL_CTL_ADD, clientFd, &clientEvent);
 }
 
+/**
+ * @brief close Socket Connection and remove it from epoll also close Cgi.
+ * @param it : iterator for clients_ map to close.
+ * @param epollFd : epoll file descriptor.
+ */
 void Server::closeClient(std::map<int, std::unique_ptr<Client>>::iterator it, int epollFd) {
     Client& client = *(it->second);
     const bool wasCgi = client.getState() == ClientState::CGI_RUNNING;
@@ -325,6 +381,13 @@ void Server::closeClient(std::map<int, std::unique_ptr<Client>>::iterator it, in
         resumeWaitingClients(epollFd);
 }
 
+
+/**
+ * @brief Arm client for writing by setting state to WRITING_RESPONSE and registering EPOLLOUT with epoll.
+ * @param client Client object to send the response to.
+ * @param epollFd Epoll file descriptor to modify client events.
+ */
+
 void Server::armClientWrite(Client& client, int epollFd) {
     client.setState(ClientState::WRITING_RESPONSE);
     struct epoll_event ev {};
@@ -333,6 +396,10 @@ void Server::armClientWrite(Client& client, int epollFd) {
     epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
 }
 
+/**
+ * @brief Count the number of active CGI processes.
+ * @return Number of active CGI processes.
+ */
 size_t Server::countCgiRunning() const {
     size_t n = 0;
     for (const auto& entry : clients_) {
@@ -342,6 +409,11 @@ size_t Server::countCgiRunning() const {
     return n;
 }
 
+/** 
+ * @brief Temporarily pause reading from the client by removing EPOLLIN (keeps EPOLLRDHUP).
+ * @param client Client object to pause reading from.
+ * @param epollFd Epoll file descriptor to modify the event.
+ */
 void Server::pauseClientRead(Client& client, int epollFd) {
     client.updateLastActiveTime();
     struct epoll_event ev {};
@@ -350,6 +422,10 @@ void Server::pauseClientRead(Client& client, int epollFd) {
     epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
 }
 
+/**
+ * @brief Resume read events for waiting clients and process any completed requests once a CGI slot becomes available.
+ * @param epollFd Epoll file descriptor used to update client events.
+ */
 void Server::resumeWaitingClients(int epollFd) {
     if (countCgiRunning() >= MAX_ACTIVE_CGI)
         return;
@@ -375,6 +451,12 @@ void Server::resumeWaitingClients(int epollFd) {
     }
 }
 
+/**
+ * @brief Read incoming data from a client socket into its request buffer and trigger processing when the request is complete.
+ * @param clientFd Socket file descriptor with pending read data.
+ * @param epollFd Epoll file descriptor.
+ * @param it Iterator pointing to the client in the clients_ map.
+ */
 void Server::handleClientRead(int clientFd, int epollFd,
                               std::map<int, std::unique_ptr<Client>>::iterator it) {
     Client& client = *(it->second);
@@ -398,6 +480,7 @@ void Server::handleClientRead(int clientFd, int epollFd,
         return;
 
     client.appendRequestBuffer(buf, static_cast<size_t>(ret));
+    client.updateLastActiveTime();
 
     const uint64_t bodyCap = maxConfiguredBodyLimit(serverConfigs_);
     const std::string& reqBuf = client.getRequestBuffer();
@@ -436,6 +519,11 @@ void Server::handleClientRead(int clientFd, int epollFd,
     processRequest(client, epollFd);
 }
 
+/**
+ * @brief Parse the complete HTTP request and route to either static file generation or CGI execution.
+ * @param client Client object whose request is being processed.
+ * @param epollFd Epoll file descriptor.
+ */
 void Server::processRequest(Client& client, int epollFd) {
     HttpRequest req;
     if (req.parse(client.getRequestBuffer())) {
@@ -468,13 +556,21 @@ void Server::processRequest(Client& client, int epollFd) {
         HttpResponse::RequestView view;
         view.errorStatus = 400;
         HttpResponse res;
-        res.buildForPath(view, serverConfigs_[0]);
+        const ServerConfig* sc = selectServerConfig(client.getServerPort(), "");
+        const ServerConfig& config = (sc != nullptr) ? *sc : serverConfigs_[0];
+        res.buildForPath(view, config);
         client.setResponseBuffer(res.getRaw());
     }
 
     armClientWrite(client, epollFd);
 }
 
+/**
+ * @brief Select the matching virtual host ServerConfig based on the listening port and Host header.
+ * @param port Listening port number of the connection.
+ * @param hostHeader Value of the HTTP 'Host' header (hostname or IP[:port]).
+ * @return Pointer to matched ServerConfig, default ServerConfig for the port if server_name does not match, or nullptr if no port matches.
+ */
 const ServerConfig* Server::selectServerConfig(int port, const std::string& hostHeader) const {
     size_t colon = hostHeader.find(':');
     size_t hostNameLen = (colon != std::string::npos) ? colon : hostHeader.length();
@@ -499,12 +595,25 @@ const ServerConfig* Server::selectServerConfig(int port, const std::string& host
     return defaultServer;
 }
 
+/**
+ * @brief Retrieve the appropriate ServerConfig for a client based on its port and HTTP Host header.
+ * @param client Client object associated with the connection.
+ * @param req Parsed HTTP request containing headers.
+ * @return Reference to the selected ServerConfig (falls back to serverConfigs_[0] if none matches).
+ */
 const ServerConfig& Server::findServerConfig(const Client& client, const HttpRequest& req) const {
     const ServerConfig* selected =
         selectServerConfig(client.getServerPort(), req.getHeader("host"));
     return selected != nullptr ? *selected : serverConfigs_[0];
 }
 
+/**
+ * @brief Construct a CgiHandler::Request containing script paths, request body, and CGI/1.1 environment variables.
+ * @param client Requesting client object.
+ * @param req Parsed HTTP request.
+ * @param loc Matched LocationConfig containing CGI directives.
+ * @return Populated CgiHandler::Request object.
+ */
 CgiHandler::Request Server::createCgiRequest(Client& client, HttpRequest& req,
                                              const LocationConfig* loc) const {
     CgiHandler::Request cgiReq;
@@ -536,7 +645,11 @@ CgiHandler::Request Server::createCgiRequest(Client& client, HttpRequest& req,
     return cgiReq;
 }
 
-// Clear this client's pipe fds from epoll, then re-add whatever CgiHandler still wants.
+/**
+ * @brief Synchronize CGI pipe file descriptors (stdin/stdout) with epoll based on CgiHandler event demands.
+ * @param client Client object holding the active CGI handler.
+ * @param epollFd Epoll file descriptor.
+ */
 void Server::syncCgiEpoll(Client& client, int epollFd) {
     const int clientFd = client.getFd();
     for (auto it = cgiPipeToClient_.begin(); it != cgiPipeToClient_.end();) {
@@ -564,6 +677,11 @@ void Server::syncCgiEpoll(Client& client, int epollFd) {
     addPipe(cgi.stdoutFd(), cgi.stdoutEvents());
 }
 
+/**
+ * @brief Finalize CGI execution, remove epoll watches, format the HTTP response, and switch the client to write mode.
+ * @param client Client object with finished CGI execution.
+ * @param epollFd Epoll file descriptor.
+ */
 void Server::finishCgi(Client& client, int epollFd) {
     // Remove pipe watches first (fds may already be closed by CgiHandler).
     for (auto it = cgiPipeToClient_.begin(); it != cgiPipeToClient_.end();) {
@@ -591,7 +709,9 @@ void Server::finishCgi(Client& client, int epollFd) {
         view.errorStatus = err;
         view.method = client.omitCgiBody() ? "HEAD" : "GET";
         HttpResponse res;
-        res.buildForPath(view, serverConfigs_[0]);
+        const ServerConfig* sc = selectServerConfig(client.getServerPort(), "");
+        const ServerConfig& config = (sc != nullptr) ? *sc : serverConfigs_[0];
+        res.buildForPath(view, config);
         client.setResponseBuffer(res.getRaw());
     }
     client.clearCgi();
@@ -600,6 +720,13 @@ void Server::finishCgi(Client& client, int epollFd) {
     resumeWaitingClients(epollFd);
 }
 
+/**
+ * @brief Handle CGI execution by spawning a CgiHandler instance, launching the child process, and registering pipes with epoll.
+ * @param client Requesting client object.
+ * @param req Parsed HTTP request.
+ * @param loc Matched LocationConfig containing CGI configuration.
+ * @param epollFd Epoll file descriptor.
+ */
 void Server::handleCgi(Client& client, HttpRequest& req, const LocationConfig* loc,
                        int epollFd) {
     const ServerConfig& config = findServerConfig(client, req);
@@ -645,6 +772,12 @@ void Server::handleCgi(Client& client, HttpRequest& req, const LocationConfig* l
     }
 }
 
+/**
+ * @brief Handle read/write I/O events on CGI pipes (stdin feed or stdout read) and advance CGI state.
+ * @param pipeFd File descriptor of the ready CGI pipe.
+ * @param events Bitmask of triggered epoll events.
+ * @param epollFd Epoll file descriptor.
+ */
 void Server::handleCgiPipeEvent(int pipeFd, uint32_t events, int epollFd) {
     auto mapIt = cgiPipeToClient_.find(pipeFd);
     if (mapIt == cgiPipeToClient_.end())
@@ -668,6 +801,10 @@ void Server::handleCgiPipeEvent(int pipeFd, uint32_t events, int epollFd) {
         finishCgi(client, epollFd);
 }
 
+/**
+ * @brief Check execution duration for all active CGI processes, terminating timed-out scripts and generating 504 responses.
+ * @param epollFd Epoll file descriptor.
+ */
 void Server::checkCgiTimeouts(int epollFd) {
     for (auto& entry : clients_) {
         Client& client = *entry.second;
@@ -681,6 +818,10 @@ void Server::checkCgiTimeouts(int epollFd) {
     }
 }
 
+/**
+ * @brief Identify and terminate connections for idle clients that have exceeded CLIENT_IDLE_TIMEOUT_SEC.
+ * @param epollFd Epoll file descriptor.
+ */
 void Server::checkIdleClients(int epollFd) {
     const time_t now = std::time(nullptr);
     for (auto it = clients_.begin(); it != clients_.end();) {
@@ -700,6 +841,12 @@ void Server::checkIdleClients(int epollFd) {
     }
 }
 
+/**
+ * @brief Send queued response buffer data over the socket on EPOLLOUT readiness, closing the connection when complete.
+ * @param clientFd Socket file descriptor ready for transmission.
+ * @param epollFd Epoll file descriptor.
+ * @param it Iterator pointing to the client in the clients_ map.
+ */
 void Server::handleClientWrite(int clientFd, int epollFd,
                                std::map<int, std::unique_ptr<Client>>::iterator it) {
     Client& client = *(it->second);
