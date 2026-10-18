@@ -45,6 +45,9 @@ class Client {
     void setCgi(std::unique_ptr<CgiHandler> cgi) { cgi_ = std::move(cgi); }
     void clearCgi() { cgi_.reset(); }
 
+    bool omitCgiBody() const { return omitCgiBody_; }
+    void setOmitCgiBody(bool omit) { omitCgiBody_ = omit; }
+
    private:
     const Client& operator=(const Client& other) = delete;
     Client(const Client& other) = delete;
@@ -60,4 +63,5 @@ class Client {
     ClientState state_;
     time_t lastActiveTime_;
     std::unique_ptr<CgiHandler> cgi_;
+    bool omitCgiBody_ = false;
 };

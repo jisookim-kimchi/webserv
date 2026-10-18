@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 #include <cctype>
 #include <cerrno>
+#include <cstdint>
 #include <netinet/tcp.h>
 #include <poll.h>
 #include <stdexcept>
@@ -117,16 +118,18 @@ bool isRequestComplete(const std::string& buf) {
  */
 std::string resolveScriptPath(const HttpResponse& mapper, const ServerConfig& server,
                               const LocationConfig& loc, const std::string& urlPath) {
-    std::string fs = mapper.mapUrlToFs(loc, urlPath);
+    const std::string path = Utils::normalizeUrlPath(urlPath);
+    std::string fs = mapper.mapUrlToFs(loc, path);
     if (!fs.empty())
         return fs;
-    const LocationConfig* rooted = LocationMatch::matchPrefixWithRoot(urlPath, server);
+    const LocationConfig* rooted = LocationMatch::matchPrefixWithRoot(path, server);
     if (rooted != nullptr) {
-        fs = mapper.mapUrlToFs(*rooted, urlPath);
+        fs = mapper.mapUrlToFs(*rooted, path);
         if (!fs.empty())
             return fs;
     }
-    return loc.getCgiPass();
+    // Do not fall back to cgi_pass (interpreter); missing scripts must fail validation.
+    return "";
 }
 
 /**
@@ -144,11 +147,12 @@ uint32_t pollToEpoll(short pevents) {
 }
 
 /**
- * @brief : format CGI script execution result into HTTP/1.1 response string
- * @param cgiResult : parsed output from CGI script execution (status code, headers, body).
- * @return : formatted HTTP/1.1 response string to send to client.
+ * @brief Format CGI script execution result into HTTP/1.1 response string.
+ * @param cgiResult Parsed output from CGI script execution (status code, headers, body).
+ * @param omitBody Whether to omit response body (e.g. for HEAD requests).
+ * @return Formatted HTTP/1.1 response string to send to client.
  */
-std::string formatCgiHttp(const CgiHandler::Result& cgiResult) {
+std::string formatCgiHttp(const CgiHandler::Result& cgiResult, bool omitBody) {
     std::string out = "HTTP/1.1 " + std::to_string(cgiResult.statusCode) + " " +
                       HttpResponse::statusText(cgiResult.statusCode) + "\r\n";
     bool hasCL = false;
@@ -162,27 +166,43 @@ std::string formatCgiHttp(const CgiHandler::Result& cgiResult) {
     if (!hasCL)
         out += "Content-Length: " + std::to_string(cgiResult.body.size()) + "\r\n";
     out += "Connection: close\r\n\r\n";
-    out += cgiResult.body;
+    if (!omitBody)
+        out += cgiResult.body;
     return out;
+}
+
+uint64_t maxConfiguredBodyLimit(const std::vector<ServerConfig>& configs) {
+    uint64_t maxLimit = 0;
+    bool any = false;
+    for (const auto& config : configs) {
+        const uint64_t serverLimit = config.getClientMaxBodySize();
+        if (serverLimit != 0) {
+            any = true;
+            if (serverLimit > maxLimit)
+                maxLimit = serverLimit;
+        }
+        for (const auto& loc : config.getLocations()) {
+            if (!loc.hasClientMaxBodySize())
+                continue;
+            const uint64_t locLimit = loc.getClientMaxBodySize();
+            if (locLimit != 0) {
+                any = true;
+                if (locLimit > maxLimit)
+                    maxLimit = locLimit;
+            }
+        }
+    }
+    return any ? maxLimit : 0;
 }
 
 }  // namespace
 
 Server::~Server() {}
 
-const Server& Server::operator=(const Server& other) {
-    (void)other;
-    return *this;
-}
-
-Server::Server(const Server& other) {
-    (void)other;
-}
-
 /**
- * @brief Server constructor, parses server configurations and initializes listen sockets
- * @param serverConfigs parsed server configurations.
- * @throws std::runtime_error duplicate listen address or socket creation/binding failure.
+ * @brief Server constructor, parses server configurations and initializes listen sockets.
+ * @param serverConfigs Parsed server configurations.
+ * @throws std::runtime_error Duplicate listen address or socket creation/binding failure.
  */
 Server::Server(const std::vector<ServerConfig>& serverConfigs) : serverConfigs_(serverConfigs) {
     std::map<std::string, bool> seenListen;
@@ -220,20 +240,8 @@ bool Server::isListenSocket(int fd) {
 }
 
 /**
- * @brief check if there is at least one active CGI (used to determine epoll timeout)
- * @return : true if there is at least one active CGI, false otherwise
- */
-bool Server::hasActiveCgi() const {
-    for (const auto& entry : clients_) {
-        if (entry.second->getState() == ClientState::CGI_RUNNING && entry.second->cgi() != nullptr)
-            return true;
-    }
-    return false;
-}
-
-/**
- * @brief create an epoll instance and start the event loop to process all network I/O and CGI events
- * @throws std::runtime_error epoll_create or epoll_ctl registration failure
+ * @brief Create an epoll instance and start the event loop to process all network I/O and CGI events.
+ * @throws std::runtime_error If epoll_create or epoll_ctl registration fails.
  */
 void Server::run() {
     int epollFd = epoll_create(1);
@@ -254,7 +262,7 @@ void Server::run() {
     struct epoll_event events[MAX_EVENTS]{};
     while (true) {
         int timeout = -1;
-        if (hasActiveCgi())
+        if (countCgiRunning() > 0)
             timeout = CGI_POLL_TIMEOUT_MS;
         else if (!clients_.empty())
             timeout = IDLE_POLL_TIMEOUT_MS;
@@ -285,12 +293,17 @@ void Server::run() {
             if (it == clients_.end())
                 continue;
 
-            if (events[i].events & (EPOLLERR | EPOLLHUP)) {
+            if (events[i].events & EPOLLERR) {
+                closeClient(it, epollFd);
+                continue;
+            }
+            if (events[i].events & EPOLLHUP) {
                 closeClient(it, epollFd);
                 continue;
             }
             if (events[i].events & EPOLLRDHUP) {
-                if (it->second->getState() == ClientState::READING_REQUEST) {
+                const ClientState st = it->second->getState();
+                if (st == ClientState::READING_REQUEST || st == ClientState::CGI_RUNNING) {
                     closeClient(it, epollFd);
                     continue;
                 }
@@ -401,6 +414,7 @@ size_t Server::countCgiRunning() const {
  * @param epollFd Epoll file descriptor to modify the event.
  */
 void Server::pauseClientRead(Client& client, int epollFd) {
+    client.updateLastActiveTime();
     struct epoll_event ev {};
     ev.events = EPOLLRDHUP;
     ev.data.fd = client.getFd();
@@ -465,6 +479,39 @@ void Server::handleClientRead(int clientFd, int epollFd,
         return;
 
     client.appendRequestBuffer(buf, static_cast<size_t>(ret));
+
+    const uint64_t bodyCap = maxConfiguredBodyLimit(serverConfigs_);
+    const std::string& reqBuf = client.getRequestBuffer();
+    if (bodyCap != 0) {
+        const size_t hardCap = static_cast<size_t>(bodyCap) + 65536;
+        if (reqBuf.size() > hardCap) {
+            HttpResponse::RequestView view;
+            view.errorStatus = 413;
+            HttpResponse res;
+            res.buildForPath(view, serverConfigs_[0]);
+            client.getRequestBuffer().clear();
+            client.setResponseBuffer(res.getRaw());
+            armClientWrite(client, epollFd);
+            return;
+        }
+        const size_t headerEnd = reqBuf.find("\r\n\r\n");
+        if (headerEnd != std::string::npos) {
+            const std::string cl = headerValue(reqBuf.substr(0, headerEnd), "content-length");
+            size_t expected = 0;
+            if (!cl.empty() && Utils::parseSizeDecimal(cl, expected) &&
+                expected > static_cast<size_t>(bodyCap)) {
+                HttpResponse::RequestView view;
+                view.errorStatus = 413;
+                HttpResponse res;
+                res.buildForPath(view, serverConfigs_[0]);
+                client.getRequestBuffer().clear();
+                client.setResponseBuffer(res.getRaw());
+                armClientWrite(client, epollFd);
+                return;
+            }
+        }
+    }
+
     if (!isRequestComplete(client.getRequestBuffer()))
         return;
     processRequest(client, epollFd);
@@ -648,7 +695,8 @@ void Server::finishCgi(Client& client, int epollFd) {
     if (client.cgi() != nullptr) {
         const CgiHandler::State st = client.cgi()->state();
         if (st == CgiHandler::State::Done) {
-            client.setResponseBuffer(formatCgiHttp(client.cgi()->result()));
+            client.setResponseBuffer(
+                formatCgiHttp(client.cgi()->result(), client.omitCgiBody()));
             err = 0;
         } else if (st == CgiHandler::State::TimedOut) {
             err = 504;
@@ -657,6 +705,7 @@ void Server::finishCgi(Client& client, int epollFd) {
     if (err != 0) {
         HttpResponse::RequestView view;
         view.errorStatus = err;
+        view.method = client.omitCgiBody() ? "HEAD" : "GET";
         HttpResponse res;
         const ServerConfig* sc = selectServerConfig(client.getServerPort(), "");
         const ServerConfig& config = (sc != nullptr) ? *sc : serverConfigs_[0];
@@ -664,6 +713,7 @@ void Server::finishCgi(Client& client, int epollFd) {
         client.setResponseBuffer(res.getRaw());
     }
     client.clearCgi();
+    client.setOmitCgiBody(false);
     armClientWrite(client, epollFd);
     resumeWaitingClients(epollFd);
 }
@@ -678,14 +728,29 @@ void Server::finishCgi(Client& client, int epollFd) {
 void Server::handleCgi(Client& client, HttpRequest& req, const LocationConfig* loc,
                        int epollFd) {
     const ServerConfig& config = findServerConfig(client, req);
+    client.setOmitCgiBody(req.getMethodString() == "HEAD");
     try {
+        CgiHandler::Request cgiReq = createCgiRequest(client, req, loc);
+        if (cgiReq.scriptPath.empty()) {
+            client.clearCgi();
+            HttpResponse::RequestView view;
+            view.errorStatus = 404;
+            view.method = req.getMethodString();
+            HttpResponse res;
+            res.buildForPath(view, config);
+            client.setResponseBuffer(res.getRaw());
+            client.setOmitCgiBody(false);
+            armClientWrite(client, epollFd);
+            resumeWaitingClients(epollFd);
+            return;
+        }
         client.setCgi(std::make_unique<CgiHandler>());
-        client.cgi()->launch(createCgiRequest(client, req, loc), CGI_EXECUTION_TIMEOUT_MS);
+        client.cgi()->launch(std::move(cgiReq), CGI_EXECUTION_TIMEOUT_MS);
         client.setState(ClientState::CGI_RUNNING);
         syncCgiEpoll(client, epollFd);
 
         struct epoll_event ev {};
-        ev.events = EPOLLERR | EPOLLHUP;
+        ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP;
         ev.data.fd = client.getFd();
         epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
 
@@ -695,9 +760,11 @@ void Server::handleCgi(Client& client, HttpRequest& req, const LocationConfig* l
         client.clearCgi();
         HttpResponse::RequestView view;
         view.errorStatus = 500;
+        view.method = req.getMethodString();
         HttpResponse res;
         res.buildForPath(view, config);
         client.setResponseBuffer(res.getRaw());
+        client.setOmitCgiBody(false);
         armClientWrite(client, epollFd);
         resumeWaitingClients(epollFd);
     }
@@ -756,8 +823,8 @@ void Server::checkCgiTimeouts(int epollFd) {
 void Server::checkIdleClients(int epollFd) {
     const time_t now = std::time(nullptr);
     for (auto it = clients_.begin(); it != clients_.end();) {
-        const ClientState state = it->second->getState();
-        if (state == ClientState::READING_REQUEST || state == ClientState::CGI_RUNNING) {
+        // CGI lifetime is owned by checkCgiTimeouts.
+        if (it->second->getState() == ClientState::CGI_RUNNING) {
             ++it;
             continue;
         }

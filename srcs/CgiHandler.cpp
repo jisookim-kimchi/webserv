@@ -270,7 +270,11 @@ void CgiHandler::spawnChild(const Request& request, int stdinRead, int stdinWrit
     // when possible; keep absolute paths as-is.
     std::string scriptArg = request.scriptPath;
     if (!cwd.empty()) {
-        if (chdir(cwd.c_str()) == 0 && scriptArg.compare(0, cwd.size(), cwd) == 0) {
+        const bool insideCwd =
+            scriptArg == cwd ||
+            (scriptArg.size() > cwd.size() && scriptArg.compare(0, cwd.size(), cwd) == 0 &&
+             scriptArg[cwd.size()] == '/');
+        if (chdir(cwd.c_str()) == 0 && insideCwd) {
             scriptArg = scriptArg.substr(cwd.size());
             while (!scriptArg.empty() && scriptArg[0] == '/')
                 scriptArg.erase(0, 1);

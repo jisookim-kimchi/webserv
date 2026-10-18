@@ -1,6 +1,8 @@
 # Peer-evaluation checklist (EvalHub + subject)
 
-Run on **Linux** (requires `epoll`). From the project root:
+Run on **Linux** (requires `epoll`). Always from the **project root** (relative
+`root` / `cgi_pass` paths are resolved against the process cwd). Listen sockets
+are IPv4 only.
 
 ```bash
 make re

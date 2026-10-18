@@ -10,67 +10,12 @@
 #include <ctime>
 #include <fstream>
 #include <sstream>
-#include <vector>
-
-namespace {
-
-std::string normalizePath(const std::string& path) {
-    if (path.empty()) {
-        return "/";
-    }
-    std::vector<std::string> parts;
-    std::string cur;
-    for (char c : path) {
-        if (c == '/') {
-            if (!cur.empty()) {
-                parts.push_back(cur);
-                cur.clear();
-            }
-        } else {
-            cur.push_back(c);
-        }
-    }
-    if (!cur.empty()) {
-        parts.push_back(cur);
-    }
-
-    std::vector<std::string> out;
-    for (const std::string& p : parts) {
-        if (p == "." || p.empty()) {
-            continue;
-        }
-        if (p == "..") {
-            if (!out.empty()) {
-                out.pop_back();
-            }
-            continue;
-        }
-        out.push_back(p);
-    }
-
-    std::string result = "/";
-    for (std::size_t i = 0; i < out.size(); ++i) {
-        if (i) {
-            result.push_back('/');
-        }
-        result += out[i];
-    }
-    if (out.empty()) {
-        return "/";
-    }
-    if (path.size() > 1 && path.back() == '/') {
-        result.push_back('/');
-    }
-    return result;
-}
-
-}  // namespace
 
 namespace LocationMatch {
 
 const LocationConfig* match(const std::string& urlPath, const std::string& method,
                             const ServerConfig& server) {
-    const std::string path = normalizePath(urlPath);
+    const std::string path = Utils::normalizeUrlPath(urlPath);
     const LocationConfig* best = nullptr;
     std::size_t bestLen = 0;
     const LocationConfig* ext = nullptr;
@@ -110,7 +55,7 @@ const LocationConfig* match(const std::string& urlPath, const ServerConfig& serv
 }
 
 const LocationConfig* matchPrefixWithRoot(const std::string& urlPath, const ServerConfig& server) {
-    const std::string path = normalizePath(urlPath);
+    const std::string path = Utils::normalizeUrlPath(urlPath);
     const LocationConfig* best = nullptr;
     std::size_t bestLen = 0;
 
@@ -225,7 +170,7 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
         return;
     }
 
-    const std::string path = normalizePath(request.path.empty() ? "/" : request.path);
+    const std::string path = Utils::normalizeUrlPath(request.path.empty() ? "/" : request.path);
 
     if (!location.getCgiPass().empty()) {
         needsCgi_ = true;

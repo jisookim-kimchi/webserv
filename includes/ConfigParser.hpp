@@ -6,10 +6,10 @@
 
 class ConfigParser {
    public:
-    ConfigParser();
-    ~ConfigParser();
-    ConfigParser(const ConfigParser& other);
-    ConfigParser& operator=(const ConfigParser& other);
+    ConfigParser() = default;
+    ~ConfigParser() = default;
+    ConfigParser(const ConfigParser& other) = default;
+    ConfigParser& operator=(const ConfigParser& other) = default;
 
     const std::vector<ServerConfig>& getServerConfigs() const {
         return server_configs_;
