@@ -367,11 +367,13 @@ void Server::closeClient(std::map<int, std::unique_ptr<Client>>::iterator it, in
         resumeWaitingClients(epollFd);
 }
 
+
 /**
- * @brief 클라이언트의 상태를 WRITING_RESPONSE로 전환하고 epoll을 EPOLLOUT(쓰기 감시) 모드로 변경한다.
- * @param client 응답을 전송할 클라이언트 객체.
- * @param epollFd 클라이언트 이벤트를 수정할 epoll fd.
+ * @brief Arm client for writing by setting state to WRITING_RESPONSE and registering EPOLLOUT with epoll.
+ * @param client Client object to send the response to.
+ * @param epollFd Epoll file descriptor to modify client events.
  */
+
 void Server::armClientWrite(Client& client, int epollFd) {
     client.setState(ClientState::WRITING_RESPONSE);
     struct epoll_event ev {};
@@ -393,10 +395,10 @@ size_t Server::countCgiRunning() const {
     return n;
 }
 
-/**
- * @brief 최대 동시 CGI 개수 초과 시 클라이언트 소켓의 읽기(EPOLLIN) 감시를 일시 중단한다.
- * @param client 읽기를 일시 중단할 클라이언트 객체.
- * @param epollFd 이벤트를 수정할 epoll fd.
+/** 
+ * @brief Temporarily pause reading from the client by removing EPOLLIN (keeps EPOLLRDHUP).
+ * @param client Client object to pause reading from.
+ * @param epollFd Epoll file descriptor to modify the event.
  */
 void Server::pauseClientRead(Client& client, int epollFd) {
     struct epoll_event ev {};
@@ -406,8 +408,8 @@ void Server::pauseClientRead(Client& client, int epollFd) {
 }
 
 /**
- * @brief 실행 중이던 CGI가 완료되어 슬롯이 확보되었을 때, 대기 중이던 클라이언트들의 읽기를 재개한다.
- * @param epollFd 대기 클라이언트들의 이벤트를 갱신할 epoll fd.
+ * @brief Resume read events for waiting clients and process any completed requests once a CGI slot becomes available.
+ * @param epollFd Epoll file descriptor used to update client events.
  */
 void Server::resumeWaitingClients(int epollFd) {
     if (countCgiRunning() >= MAX_ACTIVE_CGI)
@@ -435,10 +437,10 @@ void Server::resumeWaitingClients(int epollFd) {
 }
 
 /**
- * @brief 클라이언트 소켓에서 데이터를 읽어 버퍼에 추가하고, HTTP 요청이 완성되었으면 처리를 진행한다.
- * @param clientFd 읽기 이벤트가 발생한 클라이언트 소켓 fd.
- * @param epollFd epoll fd.
- * @param it 클라이언트 맵 반복자.
+ * @brief Read incoming data from a client socket into its request buffer and trigger processing when the request is complete.
+ * @param clientFd Socket file descriptor with pending read data.
+ * @param epollFd Epoll file descriptor.
+ * @param it Iterator pointing to the client in the clients_ map.
  */
 void Server::handleClientRead(int clientFd, int epollFd,
                               std::map<int, std::unique_ptr<Client>>::iterator it) {
@@ -469,9 +471,9 @@ void Server::handleClientRead(int clientFd, int epollFd,
 }
 
 /**
- * @brief 수신된 전체 HTTP 요청 문자열을 파싱하고, 정적 파일 응답을 생성하거나 CGI 처리를 분기한다.
- * @param client 요청을 처리할 클라이언트 객체.
- * @param epollFd epoll fd.
+ * @brief Parse the complete HTTP request and route to either static file generation or CGI execution.
+ * @param client Client object whose request is being processed.
+ * @param epollFd Epoll file descriptor.
  */
 void Server::processRequest(Client& client, int epollFd) {
     HttpRequest req;
@@ -515,10 +517,10 @@ void Server::processRequest(Client& client, int epollFd) {
 }
 
 /**
- * @brief 포트 번호와 Host 헤더를 검사하여 가장 일치하는 가상 호스트 ServerConfig를 선택한다.
- * @param port 클라이언트가 연결된 서버 포트.
- * @param hostHeader 요청 헤더의 Host 값 (도메인 또는 IP[:포트]).
- * @return 매칭된 ServerConfig 포인터. 일치하는 server_name이 없으면 해당 포트의 첫 번째 서버, 포트 매칭도 없으면 nullptr.
+ * @brief Select the matching virtual host ServerConfig based on the listening port and Host header.
+ * @param port Listening port number of the connection.
+ * @param hostHeader Value of the HTTP 'Host' header (hostname or IP[:port]).
+ * @return Pointer to matched ServerConfig, default ServerConfig for the port if server_name does not match, or nullptr if no port matches.
  */
 const ServerConfig* Server::selectServerConfig(int port, const std::string& hostHeader) const {
     size_t colon = hostHeader.find(':');
@@ -545,10 +547,10 @@ const ServerConfig* Server::selectServerConfig(int port, const std::string& host
 }
 
 /**
- * @brief 클라이언트 정보와 HTTP 요청의 Host 헤더를 바탕으로 적용할 ServerConfig를 반환한다.
- * @param client 클라이언트 객체.
- * @param req 파싱된 HttpRequest 객체.
- * @return 최종 선택된 ServerConfig 참조.
+ * @brief Retrieve the appropriate ServerConfig for a client based on its port and HTTP Host header.
+ * @param client Client object associated with the connection.
+ * @param req Parsed HTTP request containing headers.
+ * @return Reference to the selected ServerConfig (falls back to serverConfigs_[0] if none matches).
  */
 const ServerConfig& Server::findServerConfig(const Client& client, const HttpRequest& req) const {
     const ServerConfig* selected =
@@ -557,11 +559,11 @@ const ServerConfig& Server::findServerConfig(const Client& client, const HttpReq
 }
 
 /**
- * @brief CgiHandler 실행에 필요한 환경 변수 및 스크립트 실행 정보를 담은 Request 구조체를 생성한다.
- * @param client 요청한 클라이언트 객체.
- * @param req 파싱된 HttpRequest 객체.
- * @param loc 매칭된 LocationConfig (CGI 설정 정보 포함).
- * @return 초기화된 CgiHandler::Request 객체.
+ * @brief Construct a CgiHandler::Request containing script paths, request body, and CGI/1.1 environment variables.
+ * @param client Requesting client object.
+ * @param req Parsed HTTP request.
+ * @param loc Matched LocationConfig containing CGI directives.
+ * @return Populated CgiHandler::Request object.
  */
 CgiHandler::Request Server::createCgiRequest(Client& client, HttpRequest& req,
                                              const LocationConfig* loc) const {
@@ -595,9 +597,9 @@ CgiHandler::Request Server::createCgiRequest(Client& client, HttpRequest& req,
 }
 
 /**
- * @brief 클라이언트의 CGI 프로세스 파이프(stdin/stdout) 이벤트를 epoll에 동기화하여 등록/제거한다.
- * @param client 대상 클라이언트 객체.
- * @param epollFd epoll fd.
+ * @brief Synchronize CGI pipe file descriptors (stdin/stdout) with epoll based on CgiHandler event demands.
+ * @param client Client object holding the active CGI handler.
+ * @param epollFd Epoll file descriptor.
  */
 void Server::syncCgiEpoll(Client& client, int epollFd) {
     const int clientFd = client.getFd();
@@ -627,9 +629,9 @@ void Server::syncCgiEpoll(Client& client, int epollFd) {
 }
 
 /**
- * @brief CGI 실행 완료 후 파이프 감시를 정리하고, 결과를 HTTP 응답으로 변환하여 클라이언트를 쓰기 모드로 전환한다.
- * @param client 대상 클라이언트 객체.
- * @param epollFd epoll fd.
+ * @brief Finalize CGI execution, remove epoll watches, format the HTTP response, and switch the client to write mode.
+ * @param client Client object with finished CGI execution.
+ * @param epollFd Epoll file descriptor.
  */
 void Server::finishCgi(Client& client, int epollFd) {
     // Remove pipe watches first (fds may already be closed by CgiHandler).
@@ -667,11 +669,11 @@ void Server::finishCgi(Client& client, int epollFd) {
 }
 
 /**
- * @brief CGI 실행 요청을 처리한다. CgiHandler 객체를 생성하여 프로세스를 실행하고 epoll에 파이프를 등록한다.
- * @param client 요청한 클라이언트 객체.
- * @param req 파싱된 HttpRequest 객체.
- * @param loc 매칭된 LocationConfig (CGI 설정 포함).
- * @param epollFd epoll fd.
+ * @brief Handle CGI execution by spawning a CgiHandler instance, launching the child process, and registering pipes with epoll.
+ * @param client Requesting client object.
+ * @param req Parsed HTTP request.
+ * @param loc Matched LocationConfig containing CGI configuration.
+ * @param epollFd Epoll file descriptor.
  */
 void Server::handleCgi(Client& client, HttpRequest& req, const LocationConfig* loc,
                        int epollFd) {
@@ -702,10 +704,10 @@ void Server::handleCgi(Client& client, HttpRequest& req, const LocationConfig* l
 }
 
 /**
- * @brief CGI의 stdin/stdout 파이프에서 발생한 epoll 이벤트(읽기/쓰기 가능)를 처리한다.
- * @param pipeFd 이벤트가 발생한 CGI 파이프 fd.
- * @param events 발생한 epoll 이벤트 플래그.
- * @param epollFd epoll fd.
+ * @brief Handle read/write I/O events on CGI pipes (stdin feed or stdout read) and advance CGI state.
+ * @param pipeFd File descriptor of the ready CGI pipe.
+ * @param events Bitmask of triggered epoll events.
+ * @param epollFd Epoll file descriptor.
  */
 void Server::handleCgiPipeEvent(int pipeFd, uint32_t events, int epollFd) {
     auto mapIt = cgiPipeToClient_.find(pipeFd);
@@ -731,8 +733,8 @@ void Server::handleCgiPipeEvent(int pipeFd, uint32_t events, int epollFd) {
 }
 
 /**
- * @brief 현재 실행 중인 모든 CGI 프로세스의 타임아웃 여부를 검사하고, 초과 시 프로세스를 종료 및 504 응답 처리한다.
- * @param epollFd epoll fd.
+ * @brief Check execution duration for all active CGI processes, terminating timed-out scripts and generating 504 responses.
+ * @param epollFd Epoll file descriptor.
  */
 void Server::checkCgiTimeouts(int epollFd) {
     for (auto& entry : clients_) {
@@ -748,8 +750,8 @@ void Server::checkCgiTimeouts(int epollFd) {
 }
 
 /**
- * @brief 마지막 통신 후 일정 시간(CLIENT_IDLE_TIMEOUT_SEC) 동안 응답이 없는 유휴 클라이언트를 감지하여 연결을 종료한다.
- * @param epollFd epoll fd.
+ * @brief Identify and terminate connections for idle clients that have exceeded CLIENT_IDLE_TIMEOUT_SEC.
+ * @param epollFd Epoll file descriptor.
  */
 void Server::checkIdleClients(int epollFd) {
     const time_t now = std::time(nullptr);
@@ -771,10 +773,10 @@ void Server::checkIdleClients(int epollFd) {
 }
 
 /**
- * @brief 클라이언트 소켓의 쓰기 가능(EPOLLOUT) 이벤트 발생 시, 응답 버퍼의 데이터를 전송하고 완료 시 소켓을 닫는다.
- * @param clientFd 데이터를 전송할 클라이언트 소켓 fd.
- * @param epollFd epoll fd.
- * @param it 클라이언트 맵 반복자.
+ * @brief Send queued response buffer data over the socket on EPOLLOUT readiness, closing the connection when complete.
+ * @param clientFd Socket file descriptor ready for transmission.
+ * @param epollFd Epoll file descriptor.
+ * @param it Iterator pointing to the client in the clients_ map.
  */
 void Server::handleClientWrite(int clientFd, int epollFd,
                                std::map<int, std::unique_ptr<Client>>::iterator it) {
