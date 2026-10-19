@@ -70,17 +70,19 @@ It manages the lifecycle of network sockets and routes all I/O events through a 
 
 ## Client Archtecture
 
-![ClientArch](./image/Client_lifecycle.png)
+![Client_Lifecycle](./image/Client_life_cycle.png)
 
 The `Clinet` manages the state of a single client connection, including Buffers for both incoming requests and outgoing responses.  
 
 
 ## HTTP Request
 
-The `HttpRequest` class parses raw bytes received by the client socket into structured HTTP/1.1 request data according to RFC 7230 standards.
+The `HttpRequest` class parses raw bytes received by the client socket into structured HTTP/1.1 request data.
 
+### Request Format Example  
 
-![Request Format](./image/Request_Format.png)
+![Request Format Example](./image/Request_Format.png)
+
 The `HttpRequest` class parses raw bytes received by the client socket into structured HTTP/1.1 request data according to RFC 7230 standards.  
 
 ### 1. Request Line Parsing
@@ -100,35 +102,41 @@ The `HttpRequest` class parses raw bytes received by the client socket into stru
 The `CgiHandler` class handles the execution of CGI scripts in child process.
 It use `pipe()` and `fork()` to execute scripts in isolated `child processes` and captures their `stdout` to construct the HTTP response.
 
-![CGIHandler](./image/CGI.png)
+![CGIHandler](./image/CGI_flow.png)
+
+### 1. Non-blocking & Event-Driven I/O
+- using (stdin_pipe, stdout_pipe) register events for epoll_wait() to I/O operations without blocking. 
+
+### 2. Process Isolation
+- Use fork() to create a child process for executing the CGI script, thus external scripts execution does not affect the server.
 
 
 ## HTTP Response
 
+Server get a Request and make response to client.
+Based on the parsed HttpRequest and configuration files (ServerConfig, LocationConfig),  
+this class is responsible for assembling a fully RFC-compliant  
+`HTTP/1.1 response message(the Status Code + Headers + Body)`.
 
+### 1. Location matching & redirection 
+- Immediately returns HTTP `301 Moved Permanently` or `302 Found` with a `Location` header if a redirect directive (`return`) is configured
 
+### 2. Method Validation
+- inspects the HTTP method from the request line  
+if it allowed Method, it proceed. else return `405 Method Not Allowed`.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+### 3. Request Dispatching
+  - **Static File Serving (GET/HEAD)**: Resolves paths on the local filesystem. Automatically detects MIME types (`text/html`, `text/css`, `image/png`, ...)
+   - **Directory Resolution**:
+     - Serves configured `index` files (`index.html`) if present.
+     - Generates dynamic directory listings if `autoindex on` is enabled.
+     - Returns `404 Not Found` if no index exists and autoindex is disabled.
+   - **File Upload (POST/PUT)**: Writes the request payload directly to disk and returns `201 Created`.
+   - **File Deletion (DELETE)**: Removes the target resource via `unlink()` and returns `204 No Content`.
+   - **CGI Delegation**: Hands execution off to `CgiHandler` for dynamic endpoints.
+4. **Error Handling & Response Assembly**:
+   - Intercepts 4xx/5xx status codes and serves custom HTML error pages defined by `error_page`, falling back to default HTML templates.
+   - Formats status line, headers (`Content-Length`, `Content-Type`, `Connection`), and body into a raw transmission buffer for `Server::handleClientWrite`.
 
 
 ## Instructions
@@ -171,7 +179,7 @@ Then open `http://127.0.0.1:8080/` in a browser, or use `curl` against ports
 ```
 
 Individual modules: `./scripts/test.sh config`, `./scripts/test.sh cgi`,
-`./scripts/test.sh http_request`, `./scripts/test.sh http_response`.
+`./scripts/test.sh http_request`, `./scripts/test.sh http_response`, `./scripts/tcpdump.sh`
 
 ### Stress (on Linux)
 
@@ -183,3 +191,8 @@ See [docs/eval-checklist.md](docs/eval-checklist.md) for Siege and peer-evaluati
 - [NGINX Beginner’s Guide](https://nginx.org/en/docs/beginners_guide.html) (config behaviour comparison)
 - [epoll(7)](https://man7.org/linux/man-pages/man7/epoll.7.html)
 - [CGI /1.1](https://datatracker.ietf.org/doc/html/rfc3875)
+
+## AI Utilization.
+- **Architecture & Workflow Visualization** 
+- **Concept Clarification**
+- **Debugging Scripts**
