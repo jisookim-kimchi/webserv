@@ -9,6 +9,10 @@ int main(int argc, char** argv)
     std::string configPath;
     if (argc == 2)
         configPath = argv[1];
+    else if (argc == 1)
+    {
+        configPath = "./configs/Basic.config";
+    }
     else
     {
         std::cerr << "usage : ./webserv [config file]\n";

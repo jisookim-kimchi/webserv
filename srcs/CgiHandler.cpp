@@ -83,7 +83,7 @@ void CgiHandler::reset() {
     if (pid_ > 0) {
         kill(pid_, SIGKILL);
         int status = 0;
-        while (waitpid(pid_, &status, 0) < 0) {
+        while (waitpid(pid_, &status, WNOHANG) < 0) {
             if (errno != EINTR)
                 break;
         }
@@ -148,12 +148,12 @@ void CgiHandler::reapChild() {
     if (waited == 0) {
         // Still running after pipes closed: do not block the event loop forever.
         kill(pid_, SIGKILL);
-        while ((waited = waitpid(pid_, &status, 0)) < 0) {
+        while ((waited = waitpid(pid_, &status, WNOHANG)) < 0) {
             if (errno != EINTR)
                 break;
         }
     } else if (waited < 0) {
-        while ((waited = waitpid(pid_, &status, 0)) < 0) {
+        while ((waited = waitpid(pid_, &status, WNOHANG)) < 0) {
             if (errno != EINTR)
                 break;
         }
@@ -463,60 +463,60 @@ CgiHandler::Result CgiHandler::parseOutput(const std::string& raw, int waitStatu
     return result;
 }
 
-CgiHandler::Result CgiHandler::execute(const Request& request, int timeoutMs) {
-    CgiHandler cgi;
-    cgi.launch(request, timeoutMs);
+// CgiHandler::Result CgiHandler::execute(const Request& request, int timeoutMs) {
+//     CgiHandler cgi;
+//     cgi.launch(request, timeoutMs);
 
-    while (cgi.isRunning()) {
-        cgi.checkTimeout();
-        if (!cgi.isRunning())
-            break;
+//     while (cgi.isRunning()) {
+//         cgi.checkTimeout();
+//         if (!cgi.isRunning())
+//             break;
 
-        pollfd fds[2];
-        nfds_t nfds = 0;
-        int stdinIndex = -1;
-        int stdoutIndex = -1;
+//         pollfd fds[2];
+//         nfds_t nfds = 0;
+//         int stdinIndex = -1;
+//         int stdoutIndex = -1;
 
-        if (cgi.stdinEvents() != 0) {
-            stdinIndex = static_cast<int>(nfds);
-            fds[nfds].fd = cgi.stdinFd();
-            fds[nfds].events = cgi.stdinEvents();
-            fds[nfds].revents = 0;
-            ++nfds;
-        }
-        if (cgi.stdoutEvents() != 0) {
-            stdoutIndex = static_cast<int>(nfds);
-            fds[nfds].fd = cgi.stdoutFd();
-            fds[nfds].events = cgi.stdoutEvents();
-            fds[nfds].revents = 0;
-            ++nfds;
-        }
+//         if (cgi.stdinEvents() != 0) {
+//             stdinIndex = static_cast<int>(nfds);
+//             fds[nfds].fd = cgi.stdinFd();
+//             fds[nfds].events = cgi.stdinEvents();
+//             fds[nfds].revents = 0;
+//             ++nfds;
+//         }
+//         if (cgi.stdoutEvents() != 0) {
+//             stdoutIndex = static_cast<int>(nfds);
+//             fds[nfds].fd = cgi.stdoutFd();
+//             fds[nfds].events = cgi.stdoutEvents();
+//             fds[nfds].revents = 0;
+//             ++nfds;
+//         }
 
-        if (nfds == 0)
-            break;
+//         if (nfds == 0)
+//             break;
 
-        const int ready = poll(fds, nfds, 200);
-        if (ready < 0) {
-            if (errno == EINTR)
-                continue;
-            cgi.fail(std::string("poll failed: ") + std::strerror(errno));
-            break;
-        }
-        if (ready == 0)
-            continue;
+//         const int ready = poll(fds, nfds, 200);
+//         if (ready < 0) {
+//             if (errno == EINTR)
+//                 continue;
+//             cgi.fail(std::string("poll failed: ") + std::strerror(errno));
+//             break;
+//         }
+//         if (ready == 0)
+//             continue;
 
-        if (stdinIndex >= 0 && (fds[stdinIndex].revents & (POLLOUT | POLLERR | POLLHUP | POLLNVAL)))
-            cgi.onStdinReady();
-        if (cgi.isRunning() && stdoutIndex >= 0 &&
-            (fds[stdoutIndex].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)))
-            cgi.onStdoutReady();
-    }
+//         if (stdinIndex >= 0 && (fds[stdinIndex].revents & (POLLOUT | POLLERR | POLLHUP | POLLNVAL)))
+//             cgi.onStdinReady();
+//         if (cgi.isRunning() && stdoutIndex >= 0 &&
+//             (fds[stdoutIndex].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)))
+//             cgi.onStdoutReady();
+//     }
 
-    if (cgi.state() == State::Done)
-        return cgi.result();
-    if (cgi.state() == State::TimedOut)
-        throw std::runtime_error(cgi.errorMessage());
-    if (cgi.state() == State::Error)
-        throw std::runtime_error(cgi.errorMessage());
-    throw std::runtime_error("CGI ended in unexpected state");
-}
+//     if (cgi.state() == State::Done)
+//         return cgi.result();
+//     if (cgi.state() == State::TimedOut)
+//         throw std::runtime_error(cgi.errorMessage());
+//     if (cgi.state() == State::Error)
+//         throw std::runtime_error(cgi.errorMessage());
+//     throw std::runtime_error("CGI ended in unexpected state");
+// }

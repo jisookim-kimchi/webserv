@@ -82,7 +82,7 @@ class CgiHandler {
 
     // Test helper: drives this handler with a private poll loop.
     // Production Server must use the single shared poll instead.
-    static Result execute(const Request& request, int timeoutMs = 5000);
+    // static Result execute(const Request& request, int timeoutMs = 5000);
 
    private:
     void fail(const std::string& message);

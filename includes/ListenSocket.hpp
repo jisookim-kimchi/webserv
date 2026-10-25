@@ -24,7 +24,7 @@ class ListenSocket {
     void setNonBlocking();
     void bind(int port, const std::string& host);
     void listen();
-    int accept(struct sockaddr_in& clientAddr);
+    // int accept(struct sockaddr_in& clientAddr);
 
     void close();
     const int& getFd() const {
