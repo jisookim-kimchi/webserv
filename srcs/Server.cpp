@@ -353,7 +353,7 @@ void Server::handleNewConnection(int listenFd, int epollFd) {
 
     clients_[clientFd] = std::make_unique<Client>(clientFd, clientAddr, port);
     struct epoll_event clientEvent {};
-    clientEvent.events = EPOLLIN;
+    clientEvent.events = EPOLLIN | EPOLLRDHUP;
     clientEvent.data.fd = clientFd;
     epoll_ctl(epollFd, EPOLL_CTL_ADD, clientFd, &clientEvent);
 }
@@ -391,7 +391,7 @@ void Server::closeClient(std::map<int, std::unique_ptr<Client>>::iterator it, in
 void Server::armClientWrite(Client& client, int epollFd) {
     client.setState(ClientState::WRITING_RESPONSE);
     struct epoll_event ev {};
-    ev.events = EPOLLOUT;
+    ev.events = EPOLLOUT | EPOLLRDHUP;
     ev.data.fd = client.getFd();
     epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
 }
