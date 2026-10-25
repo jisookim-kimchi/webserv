@@ -6,7 +6,7 @@ import time
 
 
 def main() -> int:
-    time.sleep(30)
+    time.sleep(1)
     sys.stdout.write("Content-Type: text/plain\r\n\r\n")
     sys.stdout.write("too late\n")
     return 0
