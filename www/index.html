@@ -20,29 +20,3 @@ hr { border: 0; border-top: 1px solid #ccc; margin: 1.5em 0; }
 <body>
 <h1>Welcome to webserv!</h1>
 <p>If you see this page, the webserv HTTP/1.1 server is successfully running and working.</p>
-
-<p>For online documentation and support, please refer to
-<a href="http://nginx.org/">nginx.org</a>.<br/>
-Commercial support is available at
-<a href="http://nginx.com/">nginx.com</a>.</p>
-
-<hr/>
-
-<h3>Features & Evaluation Routes</h3>
-<ul>
-  <li><a href="/redirect">HTTP 301 Redirection to nginx.org</a></li>
-  <li><a href="/documentation">Documentation Route (301 to nginx.org)</a></li>
-  <li><a href="/upload/">Upload Directory</a> (Autoindex enabled)</li>
-  <li><a href="/cgi-bin/hello.py?name=42">CGI Python Hello</a></li>
-  <li><a href="/cgi-bin/echo.py">CGI Python Echo</a></li>
-</ul>
-
-<h3>Upload (POST raw body)</h3>
-<pre><code>curl -X POST --data-binary @file.txt http://127.0.0.1:8080/upload/</code></pre>
-
-<h3>Delete</h3>
-<pre><code>curl -X DELETE http://127.0.0.1:8080/upload/FILENAME</code></pre>
-
-<p><em>Thank you for using webserv.</em></p>
-</body>
-</html>
