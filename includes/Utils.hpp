@@ -34,7 +34,6 @@ class UniqueFd {
     int get() const noexcept;
     int release() noexcept;
     void reset(int fd = -1) noexcept;
-    explicit operator bool() const noexcept;
 
    private:
     int fd_;

@@ -45,9 +45,6 @@ std::vector<std::string> buildEnvironment(const CgiHandler::Request& request) {
         env.push_back(Utils::headerToCgiEnvKey(name) + "=" + value);
     }
 
-    for (const auto& [key, value] : request.extraEnv)
-        env.push_back(key + "=" + value);
-
     return env;
 }
 
@@ -98,18 +95,6 @@ void CgiHandler::reset() {
     errorMessage_.clear();
     deadline_ = 0;
     state_ = State::Idle;
-}
-
-void CgiHandler::cancel() {
-    if (state_ != State::Running)
-        return;
-    if (pid_ > 0)
-        kill(pid_, SIGKILL);
-    closeStdin();
-    closeStdout();
-    reapChild();
-    state_ = State::TimedOut;
-    errorMessage_ = "CGI execution cancelled";
 }
 
 void CgiHandler::fail(const std::string& message) {
@@ -197,16 +182,8 @@ bool CgiHandler::isFinished() const {
     return state_ == State::Done || state_ == State::Error || state_ == State::TimedOut;
 }
 
-bool CgiHandler::isRunning() const {
-    return state_ == State::Running;
-}
-
 const CgiHandler::Result& CgiHandler::result() const {
     return result_;
-}
-
-const std::string& CgiHandler::errorMessage() const {
-    return errorMessage_;
 }
 
 int CgiHandler::stdinFd() const {
@@ -462,61 +439,3 @@ CgiHandler::Result CgiHandler::parseOutput(const std::string& raw, int waitStatu
 
     return result;
 }
-
-// CgiHandler::Result CgiHandler::execute(const Request& request, int timeoutMs) {
-//     CgiHandler cgi;
-//     cgi.launch(request, timeoutMs);
-
-//     while (cgi.isRunning()) {
-//         cgi.checkTimeout();
-//         if (!cgi.isRunning())
-//             break;
-
-//         pollfd fds[2];
-//         nfds_t nfds = 0;
-//         int stdinIndex = -1;
-//         int stdoutIndex = -1;
-
-//         if (cgi.stdinEvents() != 0) {
-//             stdinIndex = static_cast<int>(nfds);
-//             fds[nfds].fd = cgi.stdinFd();
-//             fds[nfds].events = cgi.stdinEvents();
-//             fds[nfds].revents = 0;
-//             ++nfds;
-//         }
-//         if (cgi.stdoutEvents() != 0) {
-//             stdoutIndex = static_cast<int>(nfds);
-//             fds[nfds].fd = cgi.stdoutFd();
-//             fds[nfds].events = cgi.stdoutEvents();
-//             fds[nfds].revents = 0;
-//             ++nfds;
-//         }
-
-//         if (nfds == 0)
-//             break;
-
-//         const int ready = poll(fds, nfds, 200);
-//         if (ready < 0) {
-//             if (errno == EINTR)
-//                 continue;
-//             cgi.fail(std::string("poll failed: ") + std::strerror(errno));
-//             break;
-//         }
-//         if (ready == 0)
-//             continue;
-
-//         if (stdinIndex >= 0 && (fds[stdinIndex].revents & (POLLOUT | POLLERR | POLLHUP | POLLNVAL)))
-//             cgi.onStdinReady();
-//         if (cgi.isRunning() && stdoutIndex >= 0 &&
-//             (fds[stdoutIndex].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)))
-//             cgi.onStdoutReady();
-//     }
-
-//     if (cgi.state() == State::Done)
-//         return cgi.result();
-//     if (cgi.state() == State::TimedOut)
-//         throw std::runtime_error(cgi.errorMessage());
-//     if (cgi.state() == State::Error)
-//         throw std::runtime_error(cgi.errorMessage());
-//     throw std::runtime_error("CGI ended in unexpected state");
-// }

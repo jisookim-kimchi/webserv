@@ -50,10 +50,6 @@ const LocationConfig* match(const std::string& urlPath, const std::string& metho
     return ext != nullptr ? ext : best;
 }
 
-const LocationConfig* match(const std::string& urlPath, const ServerConfig& server) {
-    return match(urlPath, "GET", server);
-}
-
 const LocationConfig* matchPrefixWithRoot(const std::string& urlPath, const ServerConfig& server) {
     const std::string path = Utils::normalizeUrlPath(urlPath);
     const LocationConfig* best = nullptr;

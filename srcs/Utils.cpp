@@ -196,8 +196,4 @@ void UniqueFd::reset(int fd) noexcept {
     fd_ = fd;
 }
 
-UniqueFd::operator bool() const noexcept {
-    return fd_ >= 0;
-}
-
 }  // namespace Utils

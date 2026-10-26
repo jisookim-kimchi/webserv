@@ -21,7 +21,6 @@
 constexpr int MAX_EVENTS = 256;
 constexpr size_t BUF_SIZE = 65536;
 constexpr int CGI_POLL_TIMEOUT_MS = 200;
-//we can adjust that time 
 constexpr int CGI_EXECUTION_TIMEOUT_MS = 60000;
 constexpr int IDLE_POLL_TIMEOUT_MS = 1000;
 constexpr time_t CLIENT_IDLE_TIMEOUT_SEC = 60;
@@ -381,13 +380,11 @@ void Server::closeClient(std::map<int, std::unique_ptr<Client>>::iterator it, in
         resumeWaitingClients(epollFd);
 }
 
-
 /**
  * @brief Arm client for writing by setting state to WRITING_RESPONSE and registering EPOLLOUT with epoll.
  * @param client Client object to send the response to.
  * @param epollFd Epoll file descriptor to modify client events.
  */
-
 void Server::armClientWrite(Client& client, int epollFd) {
     client.setState(ClientState::WRITING_RESPONSE);
     struct epoll_event ev {};
@@ -480,7 +477,6 @@ void Server::handleClientRead(int clientFd, int epollFd,
         return;
 
     client.appendRequestBuffer(buf, static_cast<size_t>(ret));
-    client.updateLastActiveTime();
 
     const uint64_t bodyCap = maxConfiguredBodyLimit(serverConfigs_);
     const std::string& reqBuf = client.getRequestBuffer();
@@ -642,6 +638,7 @@ CgiHandler::Request Server::createCgiRequest(Client& client, HttpRequest& req,
     cgiReq.serverPort = std::to_string(client.getServerPort());
     cgiReq.serverName =
         config.getServerName().empty() ? "localhost" : config.getServerName()[0];
+    cgiReq.remoteAddr = client.getRemoteAddr();
     return cgiReq;
 }
 

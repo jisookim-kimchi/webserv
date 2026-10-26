@@ -14,7 +14,6 @@ class ServerConfig {
     ServerConfig(const ServerConfig& other) = default;
     ServerConfig& operator=(const ServerConfig& other) = default;
 
-    /* GETTER */
     const std::string& getHost() const {
         return host_;
     }
@@ -34,7 +33,6 @@ class ServerConfig {
         return locations_;
     }
 
-    /* SETTER */
     void setHost(const std::string& host) {
         host_ = host;
     }
@@ -55,10 +53,10 @@ class ServerConfig {
     }
 
    private:
-    std::string host_;                                 // Server IP Address
-    std::vector<std::string> server_name_;             // Server Name
-    std::vector<uint16_t> port_;                       // Port Number
-    std::map<uint16_t, std::string> error_page_path_;  // Error Page Path
-    uint64_t client_max_body_size_;                    // Max Body Size
-    std::vector<LocationConfig> locations_;            // Location Block
+    std::string host_;
+    std::vector<std::string> server_name_;
+    std::vector<uint16_t> port_;
+    std::map<uint16_t, std::string> error_page_path_;
+    uint64_t client_max_body_size_;
+    std::vector<LocationConfig> locations_;
 };

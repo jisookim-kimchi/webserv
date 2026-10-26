@@ -16,7 +16,7 @@ allow_methods    GET POST
 index    index.html index.htm
 location    /upload
 root    www/upload
-autoindex    off
+autoindex    on
 allow_methods    GET POST DELETE
 location    /redirect
 autoindex    off

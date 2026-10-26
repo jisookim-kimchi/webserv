@@ -5,16 +5,15 @@
 #include <string>
 #include <sys/types.h>
 
-// CGI execution module (Overview) constrained by rule.md:
+// CGI constraints (42 subject / rule.md):
 //   - fork() only for CGI
-//   - pipes are non-blocking and must be registered in Server's single poll()
-//   - never read/write a pipe unless poll marked it ready
+//   - pipes are non-blocking and registered in Server's single epoll
+//   - never read/write a pipe unless epoll marked it ready
 //   - never branch on errno after read/write
 //
-// Ownership model:
-//   Client holds one CgiHandler while a CGI request is in flight.
-//   Server adds stdinFd()/stdoutFd() into the shared poll set.
-//   HttpRequest must already have un-chunked the body before launch().
+// Ownership: Client holds one CgiHandler while a CGI request is in flight.
+// Server watches stdinFd()/stdoutFd() in the shared epoll set.
+// HttpRequest must already have un-chunked the body before launch().
 class CgiHandler {
    public:
     enum class State { Idle, Running, Done, Error, TimedOut };
@@ -37,10 +36,9 @@ class CgiHandler {
         std::string remoteAddr;
         // Original HTTP headers; converted to HTTP_* CGI variables.
         std::map<std::string, std::string> headers;
-        std::map<std::string, std::string> extraEnv;
     };
 
-    // Parsed CGI output for HttpResponse to turn into an HTTP message.
+    // Parsed CGI stdout for Server to format into an HTTP response.
     struct Result {
         int exitStatus = 0;
         int statusCode = 200;
@@ -56,33 +54,26 @@ class CgiHandler {
     CgiHandler(const CgiHandler&) = delete;
     CgiHandler& operator=(const CgiHandler&) = delete;
 
-    // fork + pipe setup. Body is fed later through onStdinReady().
+    // fork + pipe setup; body is fed later via onStdinReady().
     void launch(Request request, int timeoutMs = 5000);
 
-    // --- poll registration (Server) ---
+    // epoll registration helpers (Server)
     int stdinFd() const;
     int stdoutFd() const;
     short stdinEvents() const;
     short stdoutEvents() const;
 
-    // --- poll dispatch (call only when the matching fd is ready) ---
+    // Call only when the matching pipe fd is ready.
     void onStdinReady();
     void onStdoutReady();
     void checkTimeout();
 
     State state() const;
     bool isFinished() const;
-    bool isRunning() const;
 
     const Result& result() const;
-    const std::string& errorMessage() const;
 
-    void cancel();
     void reset();
-
-    // Test helper: drives this handler with a private poll loop.
-    // Production Server must use the single shared poll instead.
-    // static Result execute(const Request& request, int timeoutMs = 5000);
 
    private:
     void fail(const std::string& message);

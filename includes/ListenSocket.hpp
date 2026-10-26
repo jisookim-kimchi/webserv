@@ -24,7 +24,6 @@ class ListenSocket {
     void setNonBlocking();
     void bind(int port, const std::string& host);
     void listen();
-    // int accept(struct sockaddr_in& clientAddr);
 
     void close();
     const int& getFd() const {
@@ -32,9 +31,6 @@ class ListenSocket {
     }
     const int& getPort() const {
         return port_;
-    }
-    const struct sockaddr_in& getAddr() const {
-        return addr_;
     }
 
    private:

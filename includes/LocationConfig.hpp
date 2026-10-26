@@ -11,7 +11,6 @@ class LocationConfig {
     LocationConfig(const LocationConfig& other) = default;
     LocationConfig& operator=(const LocationConfig& other) = default;
 
-    /* GETTER */
     const std::string& getRoot() const {
         return root_;
     }
@@ -42,7 +41,6 @@ class LocationConfig {
         return autoindex_;
     }
 
-    /* SETTER */
     void setRoot(const std::string& root) {
         root_ = root;
     }
@@ -71,13 +69,13 @@ class LocationConfig {
     }
 
    private:
-    std::string root_;                              // Rootpath
-    std::string path_;                              // [path] : route
-    std::vector<std::string> allow_methods_;        // GET POST DELETE etc.
-    std::vector<std::string> index_;                // Default html
-    std::pair<uint16_t, std::string> redirection_;  // Redirection [status code] - [target url]
-    std::string cgi_pass_;                          // CGI pass [path]
-    uint64_t client_max_body_size_ = 0;             // (0 == max) size is default
-    bool has_client_max_body_size_ = false;         // to check if a specific size is assigned
-    bool autoindex_;                                // 1 : on, 0 : off
+    std::string root_;
+    std::string path_;
+    std::vector<std::string> allow_methods_;
+    std::vector<std::string> index_;
+    std::pair<uint16_t, std::string> redirection_;
+    std::string cgi_pass_;
+    uint64_t client_max_body_size_ = 0;
+    bool has_client_max_body_size_ = false;
+    bool autoindex_;
 };

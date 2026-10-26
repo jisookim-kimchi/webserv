@@ -93,8 +93,8 @@ std::string readFile(const std::string& path) {
     return oss.str();
 }
 
-// ConfigParser often calls exit(1). Re-exec this binary in --parse-exit mode so a
-// failing parse cannot continue the parent test suite address space.
+// Re-exec this binary in --parse-exit mode so a failing parse (throw) is isolated
+// from the parent test suite address space.
 int runParseInChild(const std::string& path) {
     const pid_t pid = fork();
     expectTrue(pid >= 0, "fork failed");

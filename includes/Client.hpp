@@ -1,7 +1,5 @@
 #pragma once
-/*
-client's are made only when server accept's
-*/
+
 #include "CgiHandler.hpp"
 
 #include <ctime>
@@ -9,6 +7,7 @@ client's are made only when server accept's
 #include <netinet/in.h>
 #include <string>
 
+// Per-connection lifecycle driven by Server's epoll loop.
 enum class ClientState {
     READING_REQUEST,
     CGI_RUNNING,
@@ -20,15 +19,17 @@ class Client {
     Client(int fd, const struct sockaddr_in& addr, int serverPort);
     ~Client();
 
+    Client(const Client& other) = delete;
+    Client& operator=(const Client& other) = delete;
+
     int getFd() const;
-    int getServerPort() const;
-    const struct sockaddr_in& getAddr() const;
+    int getServerPort() const;       // listen port used for virtual-host selection
+    std::string getRemoteAddr() const;  // peer IPv4 for CGI REMOTE_ADDR
 
     ClientState getState() const;
     void setState(ClientState state);
     size_t getOffset() const { return offset_; }
     void addOffset(size_t bytes) { offset_ += bytes; }
-    void resetOffset() { offset_ = 0; }
 
     time_t getLastActiveTime() const;
     void updateLastActiveTime();
@@ -38,7 +39,6 @@ class Client {
     void appendRequestBuffer(const char* data, size_t size);
 
     const std::string& getResponseBuffer() const;
-    std::string& getResponseBuffer();
     void setResponseBuffer(std::string response);
 
     CgiHandler* cgi() { return cgi_.get(); }
@@ -49,9 +49,6 @@ class Client {
     void setOmitCgiBody(bool omit) { omitCgiBody_ = omit; }
 
    private:
-    const Client& operator=(const Client& other) = delete;
-    Client(const Client& other) = delete;
-
     size_t offset_ = 0;
     int fd_;
     struct sockaddr_in addr_;
