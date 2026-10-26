@@ -174,7 +174,7 @@ bool HttpRequest::parseHeaders(const std::string &buffer, size_t headerStart, si
  * @param headerEnd byte offset where headers end ("\r\n\r\n").
  * @return true if body was successfully read and validated, if not, failed.
  */
-bool HttpRequest::parseBody(const std::string &buffer, size_t headerEnd)
+bool HttpRequest::parseBody(std::string &buffer, size_t headerEnd)
 {
     std::map<std::string, std::string>::const_iterator conLenIt = headers_.find("content-length");
     bool hasContentLength = (conLenIt != headers_.end());
@@ -201,6 +201,8 @@ bool HttpRequest::parseBody(const std::string &buffer, size_t headerEnd)
             {
                 if (rn + 4 > buffer.size())
                     return false;
+                buffer.clear();
+                buffer.shrink_to_fit();
                 return true;
             }
             size_t dataStart = rn + 2;
@@ -217,23 +219,29 @@ bool HttpRequest::parseBody(const std::string &buffer, size_t headerEnd)
         size_t expectedLen = 0;
         if (!Utils::parseSizeDecimal(conLenIt->second, expectedLen))
             return false;
-        const size_t available = buffer.size() - bodyStart;
-        if (available < expectedLen)
+        if (buffer.size() < bodyStart || buffer.size() - bodyStart < expectedLen)
             return false;
-        body_.assign(buffer, bodyStart, expectedLen);
+        // Take ownership of the raw buffer, then drop the header prefix so the
+        // decoded body and the wire copy are never both resident.
+        body_.swap(buffer);
+        body_.erase(0, bodyStart);
+        body_.resize(expectedLen);
+        body_.shrink_to_fit();
         return true;
     }
 
     body_.clear();
+    buffer.clear();
+    buffer.shrink_to_fit();
     return true;
 }
 
 /**
  * @brief top-level request parser called Request Line, Headers, and Body parsing.
- * @param buffer complete raw HTTP request string.
+ * @param buffer complete raw HTTP request string; cleared on successful parse.
  * @return true if parsing succeeded,if not, failed.
  */
-bool HttpRequest::parse(const std::string &buffer)
+bool HttpRequest::parse(std::string &buffer)
 {
     size_t headerEnd = buffer.find("\r\n\r\n");
     if (headerEnd == std::string::npos)

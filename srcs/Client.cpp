@@ -1,12 +1,26 @@
 #include "../includes/Client.hpp"
 
 #include <arpa/inet.h>
+#include <cstdio>
 #include <unistd.h>
 
-Client::Client(int fd, const struct sockaddr_in& addr, int serverPort)
+namespace {
+
+std::string ipv4ToString(const struct in_addr& addr) {
+    const unsigned long n = ntohl(addr.s_addr);
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%lu.%lu.%lu.%lu", (n >> 24) & 0xffUL, (n >> 16) & 0xffUL,
+                  (n >> 8) & 0xffUL, n & 0xffUL);
+    return buf;
+}
+
+}  // namespace
+
+Client::Client(int fd, const struct sockaddr_in& addr, int serverPort, const std::string& serverHost)
     : fd_(fd),
       addr_(addr),
       serverPort_(serverPort),
+      serverHost_(serverHost),
       state_(ClientState::READING_REQUEST),
       lastActiveTime_(std::time(nullptr)) {}
 
@@ -26,11 +40,12 @@ int Client::getServerPort() const {
     return serverPort_;
 }
 
+const std::string& Client::getServerHost() const {
+    return serverHost_;
+}
+
 std::string Client::getRemoteAddr() const {
-    char buf[INET_ADDRSTRLEN] = {};
-    if (inet_ntop(AF_INET, &addr_.sin_addr, buf, sizeof(buf)) == nullptr)
-        return "127.0.0.1";
-    return buf;
+    return ipv4ToString(addr_.sin_addr);
 }
 
 ClientState Client::getState() const {

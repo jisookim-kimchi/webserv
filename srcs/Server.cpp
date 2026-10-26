@@ -24,8 +24,8 @@ constexpr int CGI_POLL_TIMEOUT_MS = 200;
 constexpr int CGI_EXECUTION_TIMEOUT_MS = 60000;
 constexpr int IDLE_POLL_TIMEOUT_MS = 1000;
 constexpr time_t CLIENT_IDLE_TIMEOUT_SEC = 60;
-// Bound concurrent CGI: 20×100MB bodies otherwise OOM the process (tester EOF).
-constexpr size_t MAX_ACTIVE_CGI = 2;
+// Cap concurrent CGI processes (large POST bodies); static traffic must keep flowing.
+constexpr size_t MAX_ACTIVE_CGI = 8;
 
 namespace {
 
@@ -301,17 +301,22 @@ void Server::run() {
                 closeClient(it, epollFd);
                 continue;
             }
-            if (events[i].events & EPOLLRDHUP) {
-                const ClientState st = it->second->getState();
-                if (st == ClientState::READING_REQUEST || st == ClientState::CGI_RUNNING) {
-                    closeClient(it, epollFd);
-                    continue;
-                }
-            }
+            // Drain readable data before acting on peer shutdown (EPOLLRDHUP).
+            // Clients that close their write end after a full request (e.g. nc -q)
+            // often deliver EPOLLIN|EPOLLRDHUP together; reading first preserves the response.
             if (events[i].events & EPOLLIN)
                 handleClientRead(eventFd, epollFd, it);
             else if (events[i].events & EPOLLOUT)
                 handleClientWrite(eventFd, epollFd, it);
+
+            it = clients_.find(eventFd);
+            if (it == clients_.end())
+                continue;
+            if (events[i].events & EPOLLRDHUP) {
+                const ClientState st = it->second->getState();
+                if (st == ClientState::READING_REQUEST && !it->second->hasPendingRequest())
+                    closeClient(it, epollFd);
+            }
         }
 
         checkCgiTimeouts(epollFd);
@@ -343,14 +348,16 @@ void Server::handleNewConnection(int listenFd, int epollFd) {
     setsockopt(clientFd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
 
     int port = 0;
+    std::string host = DEFAULT_HOST;
     for (const auto& ls : listenSockets_) {
         if (ls->getFd() == listenFd) {
             port = ls->getPort();
+            host = ls->getHost();
             break;
         }
     }
 
-    clients_[clientFd] = std::make_unique<Client>(clientFd, clientAddr, port);
+    clients_[clientFd] = std::make_unique<Client>(clientFd, clientAddr, port, host);
     struct epoll_event clientEvent {};
     clientEvent.events = EPOLLIN | EPOLLRDHUP;
     clientEvent.data.fd = clientFd;
@@ -414,7 +421,7 @@ size_t Server::countCgiRunning() const {
 void Server::pauseClientRead(Client& client, int epollFd) {
     client.updateLastActiveTime();
     struct epoll_event ev {};
-    ev.events = EPOLLRDHUP;
+    ev.events = EPOLLERR | EPOLLHUP;
     ev.data.fd = client.getFd();
     epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
 }
@@ -435,7 +442,7 @@ void Server::resumeWaitingClients(int epollFd) {
         ev.events = EPOLLIN | EPOLLRDHUP;
         ev.data.fd = client.getFd();
         epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
-        if (isRequestComplete(client.getRequestBuffer()))
+        if (client.hasPendingRequest() || isRequestComplete(client.getRequestBuffer()))
             readyFds.push_back(client.getFd());
     }
     for (int fd : readyFds) {
@@ -459,11 +466,6 @@ void Server::handleClientRead(int clientFd, int epollFd,
     Client& client = *(it->second);
     if (client.getState() == ClientState::WRITING_RESPONSE)
         return;
-    if (client.getState() == ClientState::READING_REQUEST &&
-        countCgiRunning() >= MAX_ACTIVE_CGI) {
-        pauseClientRead(client, epollFd);
-        return;
-    }
 
     char buf[BUF_SIZE];
     ssize_t ret = read(clientFd, buf, BUF_SIZE);
@@ -522,7 +524,16 @@ void Server::handleClientRead(int clientFd, int epollFd,
  */
 void Server::processRequest(Client& client, int epollFd) {
     HttpRequest req;
-    if (req.parse(client.getRequestBuffer())) {
+    bool parsed = false;
+    if (client.hasPendingRequest()) {
+        req = std::move(*client.takePendingRequest());
+        parsed = true;
+    } else {
+        // parse() consumes requestBuffer_ on success (body stolen, no dual copy).
+        parsed = req.parse(client.getRequestBuffer());
+    }
+
+    if (parsed) {
         const ServerConfig& config = findServerConfig(client, req);
         HttpResponse::RequestView view;
         view.method = req.getMethodString();
@@ -535,24 +546,25 @@ void Server::processRequest(Client& client, int epollFd) {
 
         if (res.needsCgi()) {
             if (countCgiRunning() >= MAX_ACTIVE_CGI) {
+                req.getBody().swap(view.body);
+                client.setPendingRequest(std::make_unique<HttpRequest>(std::move(req)));
                 pauseClientRead(client, epollFd);
                 return;
             }
-            client.getRequestBuffer().clear();
             req.getBody().swap(view.body);
             const LocationConfig* loc =
                 LocationMatch::match(req.getPath(), req.getMethodString(), config);
             handleCgi(client, req, loc, epollFd);
             return;
         }
-        client.getRequestBuffer().clear();
         client.setResponseBuffer(res.getRaw());
     } else {
         client.getRequestBuffer().clear();
         HttpResponse::RequestView view;
         view.errorStatus = 400;
         HttpResponse res;
-        const ServerConfig* sc = selectServerConfig(client.getServerPort(), "");
+        const ServerConfig* sc =
+            selectServerConfig(client.getServerPort(), client.getServerHost(), "");
         const ServerConfig& config = (sc != nullptr) ? *sc : serverConfigs_[0];
         res.buildForPath(view, config);
         client.setResponseBuffer(res.getRaw());
@@ -562,15 +574,18 @@ void Server::processRequest(Client& client, int epollFd) {
 }
 
 /**
- * @brief Select the matching virtual host ServerConfig based on the listening port and Host header.
- * @param port Listening port number of the connection.
- * @param hostHeader Value of the HTTP 'Host' header (hostname or IP[:port]).
- * @return Pointer to matched ServerConfig, default ServerConfig for the port if server_name does not match, or nullptr if no port matches.
+ * @brief Select virtual host by listen host+port, then Host header (server_name).
+ * @param port Bind port of the accepting listen socket.
+ * @param listenHost Bind address of the accepting listen socket (e.g. 127.0.0.1 or 0.0.0.0).
+ * @param hostHeader Value of the HTTP Host header (hostname or IP[:port]).
+ * @return Matching ServerConfig, first config for that listen endpoint if server_name misses, or nullptr.
  */
-const ServerConfig* Server::selectServerConfig(int port, const std::string& hostHeader) const {
+const ServerConfig* Server::selectServerConfig(int port, const std::string& listenHost,
+                                               const std::string& hostHeader) const {
     size_t colon = hostHeader.find(':');
     size_t hostNameLen = (colon != std::string::npos) ? colon : hostHeader.length();
     const ServerConfig* defaultServer = nullptr;
+    const std::string& endpointHost = listenHost.empty() ? DEFAULT_HOST : listenHost;
     for (const auto& config : serverConfigs_) {
         bool portMatch = false;
         for (uint16_t p : config.getPort()) {
@@ -580,6 +595,9 @@ const ServerConfig* Server::selectServerConfig(int port, const std::string& host
             }
         }
         if (!portMatch)
+            continue;
+        const std::string& cfgHost = config.getHost().empty() ? DEFAULT_HOST : config.getHost();
+        if (cfgHost != endpointHost)
             continue;
         if (defaultServer == nullptr)
             defaultServer = &config;
@@ -592,14 +610,14 @@ const ServerConfig* Server::selectServerConfig(int port, const std::string& host
 }
 
 /**
- * @brief Retrieve the appropriate ServerConfig for a client based on its port and HTTP Host header.
+ * @brief Retrieve the appropriate ServerConfig for a client based on listen host+port and Host header.
  * @param client Client object associated with the connection.
  * @param req Parsed HTTP request containing headers.
  * @return Reference to the selected ServerConfig (falls back to serverConfigs_[0] if none matches).
  */
 const ServerConfig& Server::findServerConfig(const Client& client, const HttpRequest& req) const {
     const ServerConfig* selected =
-        selectServerConfig(client.getServerPort(), req.getHeader("host"));
+        selectServerConfig(client.getServerPort(), client.getServerHost(), req.getHeader("host"));
     return selected != nullptr ? *selected : serverConfigs_[0];
 }
 
@@ -706,7 +724,8 @@ void Server::finishCgi(Client& client, int epollFd) {
         view.errorStatus = err;
         view.method = client.omitCgiBody() ? "HEAD" : "GET";
         HttpResponse res;
-        const ServerConfig* sc = selectServerConfig(client.getServerPort(), "");
+        const ServerConfig* sc =
+            selectServerConfig(client.getServerPort(), client.getServerHost(), "");
         const ServerConfig& config = (sc != nullptr) ? *sc : serverConfigs_[0];
         res.buildForPath(view, config);
         client.setResponseBuffer(res.getRaw());
@@ -749,7 +768,7 @@ void Server::handleCgi(Client& client, HttpRequest& req, const LocationConfig* l
         syncCgiEpoll(client, epollFd);
 
         struct epoll_event ev {};
-        ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP;
+        ev.events = EPOLLERR | EPOLLHUP;
         ev.data.fd = client.getFd();
         epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
 
@@ -822,8 +841,8 @@ void Server::checkCgiTimeouts(int epollFd) {
 void Server::checkIdleClients(int epollFd) {
     const time_t now = std::time(nullptr);
     for (auto it = clients_.begin(); it != clients_.end();) {
-        // CGI lifetime is owned by checkCgiTimeouts.
-        if (it->second->getState() == ClientState::CGI_RUNNING) {
+        // CGI lifetime is owned by checkCgiTimeouts; queued requests are waiting for a slot.
+        if (it->second->getState() == ClientState::CGI_RUNNING || it->second->hasPendingRequest()) {
             ++it;
             continue;
         }
