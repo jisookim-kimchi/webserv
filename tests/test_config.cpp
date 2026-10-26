@@ -162,7 +162,7 @@ void parse_test_config_structure() {
     parser.parse(projectRoot() + "/configs/test.config");
     const auto& servers = parser.getServerConfigs();
 
-    EXPECT_EQ(servers.size(), 1u);
+    EXPECT_EQ(servers.size(), 2u);
     EXPECT_EQ(servers[0].getHost(), std::string("0.0.0.0"));
     EXPECT_EQ(servers[0].getPort().size(), 1u);
     EXPECT_EQ(servers[0].getPort()[0], 8080);
@@ -181,6 +181,8 @@ void parse_test_config_structure() {
     }
     EXPECT_TRUE(foundCgi);
     EXPECT_TRUE(foundUpload);
+
+    EXPECT_EQ(servers[1].getPort()[0], 8081);
 }
 
 void parse_basic_config_snapshot() {

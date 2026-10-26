@@ -21,7 +21,7 @@
 constexpr int MAX_EVENTS = 256;
 constexpr size_t BUF_SIZE = 65536;
 constexpr int CGI_POLL_TIMEOUT_MS = 200;
-constexpr int CGI_EXECUTION_TIMEOUT_MS = 20000;
+constexpr int CGI_EXECUTION_TIMEOUT_MS = 60000;
 constexpr int IDLE_POLL_TIMEOUT_MS = 1000;
 constexpr time_t CLIENT_IDLE_TIMEOUT_SEC = 60;
 // Cap concurrent CGI processes (large POST bodies); static traffic must keep flowing.
@@ -314,7 +314,7 @@ void Server::run() {
                 continue;
             if (events[i].events & EPOLLRDHUP) {
                 const ClientState st = it->second->getState();
-                if (st == ClientState::READING_REQUEST || st == ClientState::CGI_RUNNING)
+                if (st == ClientState::READING_REQUEST && !it->second->hasPendingRequest())
                     closeClient(it, epollFd);
             }
         }
@@ -421,7 +421,7 @@ size_t Server::countCgiRunning() const {
 void Server::pauseClientRead(Client& client, int epollFd) {
     client.updateLastActiveTime();
     struct epoll_event ev {};
-    ev.events = EPOLLRDHUP;
+    ev.events = EPOLLERR | EPOLLHUP;
     ev.data.fd = client.getFd();
     epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
 }
@@ -768,7 +768,7 @@ void Server::handleCgi(Client& client, HttpRequest& req, const LocationConfig* l
         syncCgiEpoll(client, epollFd);
 
         struct epoll_event ev {};
-        ev.events = EPOLLERR | EPOLLHUP | EPOLLRDHUP;
+        ev.events = EPOLLERR | EPOLLHUP;
         ev.data.fd = client.getFd();
         epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
 
@@ -841,8 +841,8 @@ void Server::checkCgiTimeouts(int epollFd) {
 void Server::checkIdleClients(int epollFd) {
     const time_t now = std::time(nullptr);
     for (auto it = clients_.begin(); it != clients_.end();) {
-        // CGI lifetime is owned by checkCgiTimeouts.
-        if (it->second->getState() == ClientState::CGI_RUNNING) {
+        // CGI lifetime is owned by checkCgiTimeouts; queued requests are waiting for a slot.
+        if (it->second->getState() == ClientState::CGI_RUNNING || it->second->hasPendingRequest()) {
             ++it;
             continue;
         }
