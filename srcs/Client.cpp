@@ -1,5 +1,6 @@
 #include "../includes/Client.hpp"
 
+#include <arpa/inet.h>
 #include <unistd.h>
 
 Client::Client(int fd, const struct sockaddr_in& addr, int serverPort)
@@ -25,8 +26,11 @@ int Client::getServerPort() const {
     return serverPort_;
 }
 
-const struct sockaddr_in& Client::getAddr() const {
-    return addr_;
+std::string Client::getRemoteAddr() const {
+    char buf[INET_ADDRSTRLEN] = {};
+    if (inet_ntop(AF_INET, &addr_.sin_addr, buf, sizeof(buf)) == nullptr)
+        return "127.0.0.1";
+    return buf;
 }
 
 ClientState Client::getState() const {
@@ -59,10 +63,6 @@ void Client::appendRequestBuffer(const char* data, size_t size) {
 }
 
 const std::string& Client::getResponseBuffer() const {
-    return responseBuffer_;
-}
-
-std::string& Client::getResponseBuffer() {
     return responseBuffer_;
 }
 

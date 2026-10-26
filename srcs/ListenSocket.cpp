@@ -84,22 +84,6 @@ void ListenSocket::listen() {
 }
 
 /*
-    @brief accept Connection from client
-    @return ClientSocket
-    @throws std::runtime_error if accept fails
-*/
-// int ListenSocket::accept(struct sockaddr_in& clientAddr) {
-//     socklen_t clientAddrLen = sizeof(clientAddr);
-//     int client_socket_fd = ::accept(fd_, (struct sockaddr*)&clientAddr, &clientAddrLen);
-//     if (client_socket_fd == -1) {
-//         if (errno == EWOULDBLOCK || errno == EAGAIN)
-//             return -1;
-//         throw std::runtime_error("Error : ListenSocket::accept()");
-//     }
-//     return client_socket_fd;
-// }
-
-/*
     @brief close socket
 */
 void ListenSocket::close() {

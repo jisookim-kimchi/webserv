@@ -14,6 +14,8 @@ enum class HttpMethod : unsigned int
     HEAD    = 1 << 4
 };
 
+// Parses one complete HTTP/1.1 message from a buffer.
+// Server only calls parse after isRequestComplete(); body is stored un-chunked.
 class HttpRequest
 {
 public:
@@ -21,14 +23,9 @@ public:
     ~HttpRequest() = default;
     HttpRequest(const HttpRequest& other) = default;
     bool parse(const std::string& buffer);
-    /*
-        Getter
-    */
-    HttpMethod getMethod() const {return method_;}
     std::string getMethodString() const;
     const std::string& getPath() const { return path_; }
     const std::string& getQueryString() const { return queryString_; }
-    const std::string& getVersion() const { return version_; }
     const std::string& getBody() const { return body_; }
     std::string& getBody() { return body_; }
     std::string getHeader(const std::string& key) const;

@@ -12,12 +12,14 @@
 
 class HttpRequest;
 
+// Single-threaded epoll engine: listen sockets, client sockets, and CGI pipes
+// share one epoll_wait. Configs select virtual hosts; Clients own connection state.
 class Server {
    public:
     ~Server();
     explicit Server(const std::vector<ServerConfig>& configs);
 
-    void run();
+    void run();  // blocks in the event loop
 
    private:
     Server& operator=(const Server& other) = delete;
@@ -26,7 +28,7 @@ class Server {
     std::vector<std::unique_ptr<ListenSocket>> listenSockets_;
     std::vector<ServerConfig> serverConfigs_;
     std::map<int, std::unique_ptr<Client>> clients_;
-    std::map<int, int> cgiPipeToClient_;  // pipe fd → client fd
+    std::map<int, int> cgiPipeToClient_;  // CGI pipe fd → owning client fd
 
     bool isListenSocket(int fd);
     size_t countCgiRunning() const;
