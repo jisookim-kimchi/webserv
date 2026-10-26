@@ -2,11 +2,16 @@
 
 # webserv
 
+## Description
+
 `webserv` is an HTTP/1.1 server written in C++17. It serves static files, handles
 file upload and deletion, optional directory listing (autoindex), HTTP redirects,
 and CGI scripts (for example Python) through a single non-blocking `epoll` event
 loop. Listening sockets, client sockets, and CGI pipes are all driven by the same
 `epoll_wait` call.
+
+Compatible with a non-blocking I/O model: one thread, no `select`, multiplexing via
+`epoll`. Configuration follows an Nginx-inspired `server` / `location` syntax.
 
 ## what is HTTP?
 
@@ -47,7 +52,10 @@ It manages the lifecycle of network sockets and routes all I/O events through a 
 
 ### 1. Initialization & Socket Binding  
 - Parses `ServerConfig` : configurations from the config file. refered to Nginx config file format.
--  Binds a single non-blocking `ListenSocket` per unique `host:port` to prevent port collision (`Address already in use`), allowing multiple virtual servers to share the same port.  
+- Binds one non-blocking `ListenSocket` per unique `host:port`. A duplicate exact
+  `host:port` fails at startup (`duplicate listen address`). Different ports (or
+  different bind addresses on the same port) each get their own listen socket;
+  virtual hosts are then selected by listen address/port and the HTTP `Host` header.  
   
 ### 2. Main Event Loop (`Server::run()`)
 - Operates a unified `epoll_wait` loop that multiplexes:
@@ -63,7 +71,8 @@ It manages the lifecycle of network sockets and routes all I/O events through a 
     - `handleCgiPipeEvent()`: Manages child process I/O.
 
 ### 4. Safety.
-- **CGI Concurreny Limiting (`MAX_ACTIVE_CGI`)** : limits max number of active CGI processes to 2 to prevent Memory issue.
+- **CGI Concurrency Limiting (`MAX_ACTIVE_CGI`)** : caps concurrent CGI processes; only
+  CGI-bound requests wait for a free slot, static requests are not blocked.
 - **Timeout Monitors**: 
   - `checkCgiTimeouts()`: Terminates runaway CGI processes exceeding `CGI_EXECUTION_TIMEOUT_MS`.
   - `checkIdleClients()`: Cleans up inactive connections exceeding `CLIENT_IDLE_TIMEOUT_SEC`.
@@ -132,7 +141,7 @@ if it allowed Method, it proceed. else return `405 Method Not Allowed`.
      - Generates dynamic directory listings if `autoindex on` is enabled.
      - Returns `404 Not Found` if no index exists and autoindex is disabled.
    - **File Upload (POST/PUT)**: Writes the request payload directly to disk and returns `201 Created`.
-   - **File Deletion (DELETE)**: Removes the target resource via `unlink()` and returns `204 No Content`.
+   - **File Deletion (DELETE)**: Removes the target resource via `std::remove` and returns `204 No Content`.
    - **CGI Delegation**: Hands execution off to `CgiHandler` for dynamic endpoints.
 4. **Error Handling & Response Assembly**:
    - Intercepts 4xx/5xx status codes and serves custom HTML error pages defined by `error_page`, falling back to default HTML templates.
@@ -159,7 +168,7 @@ Always start from the **repository root** so relative `root` / `cgi_pass` paths
 ./webserv [configuration file]
 ```
 
-If no configuration file is given, the default is `configs/test.config`.
+If no configuration file is given, the default is `configs/Basic.config`.
 
 Listening is **IPv4 only** (`AF_INET` via `getaddrinfo`).
 
@@ -192,7 +201,12 @@ See [docs/eval-checklist.md](docs/eval-checklist.md) for Siege and peer-evaluati
 - [epoll(7)](https://man7.org/linux/man-pages/man7/epoll.7.html)
 - [CGI /1.1](https://datatracker.ietf.org/doc/html/rfc3875)
 
-## AI Utilization.
-- **Architecture & Workflow Visualization** 
-- **Concept Clarification**
-- **Debugging Scripts**
+### AI utilization
+
+AI assistants were used as a support tool during development, not as an autonomous
+code generator for the whole project:
+
+- **Architecture diagrams** in `README.md` / `image/` (overall flow, server, CGI, client lifecycle)
+- **Concept clarification** while designing the epoll + CGI pipe model
+- **Debugging / cleanup assistance** on `Server` event ordering, config parser hardening,
+  and documentation consistency (for example aligning README defaults with `main.cpp`)

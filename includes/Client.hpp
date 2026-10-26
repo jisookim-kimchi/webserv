@@ -16,15 +16,16 @@ enum class ClientState {
 
 class Client {
    public:
-    Client(int fd, const struct sockaddr_in& addr, int serverPort);
+    Client(int fd, const struct sockaddr_in& addr, int serverPort, const std::string& serverHost);
     ~Client();
 
     Client(const Client& other) = delete;
     Client& operator=(const Client& other) = delete;
 
     int getFd() const;
-    int getServerPort() const;       // listen port used for virtual-host selection
-    std::string getRemoteAddr() const;  // peer IPv4 for CGI REMOTE_ADDR
+    int getServerPort() const;
+    const std::string& getServerHost() const;  // bind address of the accepting listen socket
+    std::string getRemoteAddr() const;         // peer IPv4 for CGI REMOTE_ADDR
 
     ClientState getState() const;
     void setState(ClientState state);
@@ -53,6 +54,7 @@ class Client {
     int fd_;
     struct sockaddr_in addr_;
     int serverPort_;
+    std::string serverHost_;
 
     std::string requestBuffer_;
     std::string responseBuffer_;

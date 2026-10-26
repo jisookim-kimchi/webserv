@@ -44,6 +44,7 @@ void ListenSocket::setNonBlocking() {
 */
 void ListenSocket::bind(int port, const std::string& host) {
     port_ = port;
+    host_ = (host.empty() ? DEFAULT_HOST : host);
 
     struct addrinfo hints = {};
     hints.ai_family = AF_INET;

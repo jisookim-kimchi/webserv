@@ -233,32 +233,33 @@ void CgiHandler::spawnChild(const Request& request, int stdinRead, int stdinWrit
     close(stdoutRead);
     close(stdoutWrite);
     closeInheritedFds();
-    // Relative cgi_pass (e.g. ./cgi_tester) must be resolved before chdir.
-    std::string interpreterPath = request.interpreterPath;
-    if (!interpreterPath.empty() && interpreterPath[0] != '/') {
-        char cwdBuf[4096];
-        if (getcwd(cwdBuf, sizeof(cwdBuf)) != nullptr)
-            interpreterPath = Utils::joinPath(cwdBuf, interpreterPath);
-    }
-    const std::string cwd = request.workingDirectory.empty() ? Utils::dirName(request.scriptPath)
-                                                             : request.workingDirectory;
-    // After chdir(cwd), a relative scriptPath that still includes cwd would double
-    // (e.g. cwd=www/cgi-bin + script=www/cgi-bin/hello.py). Pass a path relative to cwd
-    // when possible; keep absolute paths as-is.
+    // Relative cgi_pass (e.g. ./cgi_tester) is resolved against the process cwd at
+    // exec time. Skip chdir in that case so we do not need getcwd().
+    const std::string& interpreterPath = request.interpreterPath;
+    const bool relativeInterpreter =
+        !interpreterPath.empty() && interpreterPath[0] != '/';
     std::string scriptArg = request.scriptPath;
-    if (!cwd.empty()) {
-        const bool insideCwd =
-            scriptArg == cwd ||
-            (scriptArg.size() > cwd.size() && scriptArg.compare(0, cwd.size(), cwd) == 0 &&
-             scriptArg[cwd.size()] == '/');
-        if (chdir(cwd.c_str()) == 0 && insideCwd) {
-            scriptArg = scriptArg.substr(cwd.size());
-            while (!scriptArg.empty() && scriptArg[0] == '/')
-                scriptArg.erase(0, 1);
+    if (!relativeInterpreter) {
+        const std::string cwd = request.workingDirectory.empty()
+                                    ? Utils::dirName(request.scriptPath)
+                                    : request.workingDirectory;
+        // After chdir(cwd), a relative scriptPath that still includes cwd would double
+        // (e.g. cwd=www/cgi-bin + script=www/cgi-bin/hello.py). Pass a path relative to cwd
+        // when possible; keep absolute paths as-is.
+        if (!cwd.empty()) {
+            const bool insideCwd =
+                scriptArg == cwd ||
+                (scriptArg.size() > cwd.size() && scriptArg.compare(0, cwd.size(), cwd) == 0 &&
+                 scriptArg[cwd.size()] == '/');
+            if (chdir(cwd.c_str()) == 0 && insideCwd) {
+                scriptArg = scriptArg.substr(cwd.size());
+                while (!scriptArg.empty() && scriptArg[0] == '/')
+                    scriptArg.erase(0, 1);
+            }
         }
+        if (scriptArg.empty())
+            scriptArg = request.scriptPath;
     }
-    if (scriptArg.empty())
-        scriptArg = request.scriptPath;
 
     auto envStrings = buildEnvironment(request);
     auto envp = toCStringArray(envStrings);

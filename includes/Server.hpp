@@ -51,7 +51,9 @@ class Server {
     void checkCgiTimeouts(int epollFd);
     void checkIdleClients(int epollFd);
 
-    const ServerConfig* selectServerConfig(int port, const std::string& hostHeader) const;
+    // Match by listen host+port first, then Host header (server_name).
+    const ServerConfig* selectServerConfig(int port, const std::string& listenHost,
+                                           const std::string& hostHeader) const;
     const ServerConfig& findServerConfig(const Client& client, const HttpRequest& req) const;
     CgiHandler::Request createCgiRequest(Client& client, HttpRequest& req,
                                          const LocationConfig* loc) const;

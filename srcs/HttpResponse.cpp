@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <ctime>
 #include <fstream>
 #include <sstream>
@@ -184,7 +185,7 @@ void HttpResponse::build(const RequestView& request, const ServerConfig& server,
             setError(404, server, &location);
             return;
         }
-        if (::unlink(fsPath.c_str()) != 0) {
+        if (std::remove(fsPath.c_str()) != 0) {
             setError(500, server, &location);
             return;
         }

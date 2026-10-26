@@ -32,6 +32,9 @@ class ListenSocket {
     const int& getPort() const {
         return port_;
     }
+    const std::string& getHost() const {
+        return host_;
+    }
 
    private:
     ListenSocket(const ListenSocket& other);
@@ -39,5 +42,6 @@ class ListenSocket {
 
     int fd_;
     int port_;
+    std::string host_;
     struct sockaddr_in addr_;
 };
