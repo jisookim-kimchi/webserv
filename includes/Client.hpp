@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CgiHandler.hpp"
+#include "HttpRequest.hpp"
 
 #include <ctime>
 #include <memory>
@@ -49,6 +50,11 @@ class Client {
     bool omitCgiBody() const { return omitCgiBody_; }
     void setOmitCgiBody(bool omit) { omitCgiBody_ = omit; }
 
+    // Parked request while waiting for a free CGI slot (buffer already consumed).
+    bool hasPendingRequest() const { return pendingRequest_ != nullptr; }
+    void setPendingRequest(std::unique_ptr<HttpRequest> req) { pendingRequest_ = std::move(req); }
+    std::unique_ptr<HttpRequest> takePendingRequest() { return std::move(pendingRequest_); }
+
    private:
     size_t offset_ = 0;
     int fd_;
@@ -63,4 +69,5 @@ class Client {
     time_t lastActiveTime_;
     std::unique_ptr<CgiHandler> cgi_;
     bool omitCgiBody_ = false;
+    std::unique_ptr<HttpRequest> pendingRequest_;
 };

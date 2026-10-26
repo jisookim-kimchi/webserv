@@ -16,13 +16,17 @@ enum class HttpMethod : unsigned int
 
 // Parses one complete HTTP/1.1 message from a buffer.
 // Server only calls parse after isRequestComplete(); body is stored un-chunked.
+// On success, parse() consumes `buffer` (clears it) so the raw message and
+// decoded body are not held in memory at the same time.
 class HttpRequest
 {
 public:
     HttpRequest() : method_(HttpMethod::UNKNOWN){}
     ~HttpRequest() = default;
     HttpRequest(const HttpRequest& other) = default;
-    bool parse(const std::string& buffer);
+    HttpRequest(HttpRequest&& other) noexcept = default;
+    HttpRequest& operator=(HttpRequest&& other) noexcept = default;
+    bool parse(std::string& buffer);
     std::string getMethodString() const;
     const std::string& getPath() const { return path_; }
     const std::string& getQueryString() const { return queryString_; }
@@ -36,7 +40,7 @@ private:
 
     bool parseRequestLine(const std::string& buffer, size_t& headerStart);
     bool parseHeaders(const std::string& buffer, size_t headerStart, size_t headerEnd);
-    bool parseBody(const std::string& buffer, size_t headerEnd);
+    bool parseBody(std::string& buffer, size_t headerEnd);
 
     HttpMethod method_;
     std::string uri_;

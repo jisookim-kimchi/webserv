@@ -80,10 +80,12 @@ void CgiHandler::reset() {
     if (pid_ > 0) {
         kill(pid_, SIGKILL);
         int status = 0;
-        while (waitpid(pid_, &status, WNOHANG) < 0) {
-            if (errno != EINTR)
-                break;
-        }
+        pid_t waited = -1;
+        // Blocking wait after SIGKILL: WNOHANG alone can miss a not-yet-reaped child
+        // and leave a zombie.
+        do {
+            waited = waitpid(pid_, &status, 0);
+        } while (waited < 0 && errno == EINTR);
         pid_ = -1;
     }
     closeStdin();
@@ -131,17 +133,16 @@ void CgiHandler::reapChild() {
     int status = 0;
     pid_t waited = waitpid(pid_, &status, WNOHANG);
     if (waited == 0) {
-        // Still running after pipes closed: do not block the event loop forever.
+        // Still running after pipes closed: kill, then block until reaped.
+        // A WNOHANG-only loop can return 0 forever and leave zombies.
         kill(pid_, SIGKILL);
-        while ((waited = waitpid(pid_, &status, WNOHANG)) < 0) {
-            if (errno != EINTR)
-                break;
-        }
+        do {
+            waited = waitpid(pid_, &status, 0);
+        } while (waited < 0 && errno == EINTR);
     } else if (waited < 0) {
-        while ((waited = waitpid(pid_, &status, WNOHANG)) < 0) {
-            if (errno != EINTR)
-                break;
-        }
+        do {
+            waited = waitpid(pid_, &status, 0);
+        } while (waited < 0 && errno == EINTR);
     }
 
     if (waited > 0)

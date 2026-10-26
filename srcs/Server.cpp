@@ -442,7 +442,7 @@ void Server::resumeWaitingClients(int epollFd) {
         ev.events = EPOLLIN | EPOLLRDHUP;
         ev.data.fd = client.getFd();
         epoll_ctl(epollFd, EPOLL_CTL_MOD, client.getFd(), &ev);
-        if (isRequestComplete(client.getRequestBuffer()))
+        if (client.hasPendingRequest() || isRequestComplete(client.getRequestBuffer()))
             readyFds.push_back(client.getFd());
     }
     for (int fd : readyFds) {
@@ -524,7 +524,16 @@ void Server::handleClientRead(int clientFd, int epollFd,
  */
 void Server::processRequest(Client& client, int epollFd) {
     HttpRequest req;
-    if (req.parse(client.getRequestBuffer())) {
+    bool parsed = false;
+    if (client.hasPendingRequest()) {
+        req = std::move(*client.takePendingRequest());
+        parsed = true;
+    } else {
+        // parse() consumes requestBuffer_ on success (body stolen, no dual copy).
+        parsed = req.parse(client.getRequestBuffer());
+    }
+
+    if (parsed) {
         const ServerConfig& config = findServerConfig(client, req);
         HttpResponse::RequestView view;
         view.method = req.getMethodString();
@@ -537,17 +546,17 @@ void Server::processRequest(Client& client, int epollFd) {
 
         if (res.needsCgi()) {
             if (countCgiRunning() >= MAX_ACTIVE_CGI) {
+                req.getBody().swap(view.body);
+                client.setPendingRequest(std::make_unique<HttpRequest>(std::move(req)));
                 pauseClientRead(client, epollFd);
                 return;
             }
-            client.getRequestBuffer().clear();
             req.getBody().swap(view.body);
             const LocationConfig* loc =
                 LocationMatch::match(req.getPath(), req.getMethodString(), config);
             handleCgi(client, req, loc, epollFd);
             return;
         }
-        client.getRequestBuffer().clear();
         client.setResponseBuffer(res.getRaw());
     } else {
         client.getRequestBuffer().clear();

@@ -230,7 +230,9 @@ void test_large_body() {
         << "\r\n"
         << payload;
     HttpRequest req;
-    EXPECT_TRUE(req.parse(oss.str()));
+    std::string raw = oss.str();
+    EXPECT_TRUE(req.parse(raw));
+    EXPECT_TRUE(raw.empty());
     EXPECT_EQ(req.getBody().size(), payload.size());
     EXPECT_EQ(req.getBody()[0], 'A');
     EXPECT_EQ(req.getBody()[payload.size() - 1], 'A');
@@ -243,7 +245,8 @@ void test_many_headers() {
         oss << "X-Custom-" << i << ": value-" << i << "\r\n";
     oss << "\r\n";
     HttpRequest req;
-    EXPECT_TRUE(req.parse(oss.str()));
+    std::string raw = oss.str();
+    EXPECT_TRUE(req.parse(raw));
     EXPECT_EQ(req.getHeader("x-custom-0"), "value-0");
     EXPECT_EQ(req.getHeader("x-custom-199"), "value-199");
     EXPECT_EQ(req.getHeaders().size(), 201UL);  // host + 200
